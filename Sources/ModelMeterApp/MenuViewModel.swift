@@ -103,6 +103,24 @@ final class MenuViewModel {
         currentError
     }
 
+    var isAuthError: Bool {
+        guard let err = currentError else { return false }
+        let lower = err.lowercased()
+        return lower.contains("token expired")
+            || lower.contains("re-authenticate")
+            || lower.contains("unauthorized")
+            || lower.contains("credentials not found")
+            || lower.contains("log in")
+    }
+
+    var errorHint: String? {
+        guard currentError != nil else { return nil }
+        if isAuthError {
+            return "Run `claude` in Terminal to re-authenticate."
+        }
+        return nil
+    }
+
     var hasErrorState: Bool {
         currentSnapshot == nil && currentError != nil
     }

@@ -113,7 +113,7 @@ struct UsagePopoverView: View {
 
     private var errorContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Unable to read usage data")
+            Text(viewModel.isAuthError ? "Session expired" : "Unable to read usage data")
                 .font(VercelTextStyles.body())
                 .foregroundStyle(VercelColors.foreground(colorScheme))
             if let errorText = viewModel.errorText {
@@ -121,7 +121,14 @@ struct UsagePopoverView: View {
                     .font(VercelTextStyles.secondary())
                     .foregroundStyle(VercelColors.accents5(colorScheme))
             }
-            VercelSecondaryButton(title: "Locate manually") {}
+            if let hint = viewModel.errorHint {
+                Text(hint)
+                    .font(VercelTextStyles.secondary())
+                    .foregroundStyle(VercelColors.accents4(colorScheme))
+            }
+            if !viewModel.isAuthError {
+                VercelSecondaryButton(title: "Locate manually") {}
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
