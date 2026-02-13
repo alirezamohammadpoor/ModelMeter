@@ -22,6 +22,7 @@ fi
 
 cp "$EXECUTABLE_PATH" "$APP_OUT/Contents/MacOS/$PRODUCT"
 chmod +x "$APP_OUT/Contents/MacOS/$PRODUCT"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_OUT/Contents/MacOS/$PRODUCT" 2>/dev/null || true
 
 INFO_PLIST_SOURCE="$ROOT_DIR/Sources/ModelMeterApp/Info.plist"
 if [[ ! -f "$INFO_PLIST_SOURCE" ]]; then
@@ -35,9 +36,20 @@ if [[ -n "$RESOURCE_BUNDLE_PATH" ]]; then
   cp -R "$RESOURCE_BUNDLE_PATH" "$APP_OUT/Contents/Resources/"
 fi
 
-if [[ -d "$ROOT_DIR/.build/arm64-apple-macosx/release/Sparkle.framework" ]]; then
+SPARKLE_FRAMEWORK_PATH=""
+for candidate in \
+  "$ROOT_DIR/.build/arm64-apple-macosx/release/Sparkle.framework" \
+  "$ROOT_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+do
+  if [[ -d "$candidate" ]]; then
+    SPARKLE_FRAMEWORK_PATH="$candidate"
+    break
+  fi
+done
+
+if [[ -n "$SPARKLE_FRAMEWORK_PATH" ]]; then
   mkdir -p "$APP_OUT/Contents/Frameworks"
-  cp -R "$ROOT_DIR/.build/arm64-apple-macosx/release/Sparkle.framework" "$APP_OUT/Contents/Frameworks/"
+  cp -R "$SPARKLE_FRAMEWORK_PATH" "$APP_OUT/Contents/Frameworks/"
 fi
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $PRODUCT" "$APP_OUT/Contents/Info.plist" >/dev/null

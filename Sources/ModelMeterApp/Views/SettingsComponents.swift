@@ -3,12 +3,11 @@ import ModelMeterCore
 
 struct SettingsSectionHeader: View {
     let title: String
-    let provider: UsageProvider
 
     var body: some View {
         Text(title.uppercased())
             .font(ModelMeterTextStyles.sectionHeader())
-            .foregroundStyle(ProviderTheme.secondaryText(provider))
+            .foregroundStyle(SettingsTheme.sectionHeader)
             .tracking(0.5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
@@ -19,18 +18,17 @@ struct SettingsSectionHeader: View {
 
 struct ModelMeterToggleRow: View {
     let title: String
-    let provider: UsageProvider
     @Binding var isOn: Bool
 
     var body: some View {
         HStack {
             Text(title)
                 .font(ModelMeterTextStyles.body())
-                .foregroundStyle(ProviderTheme.primaryText(provider))
+                .foregroundStyle(SettingsTheme.primaryText)
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(ModelMeterToggleStyle(provider: provider))
+                .toggleStyle(ModelMeterToggleStyle())
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -38,11 +36,9 @@ struct ModelMeterToggleRow: View {
 }
 
 struct ModelMeterToggleStyle: ToggleStyle {
-    let provider: UsageProvider
-
     func makeBody(configuration: Configuration) -> some View {
-        let trackColor = configuration.isOn ? ProviderTheme.accent(provider) : ProviderTheme.progressTrack(provider)
-        let knobColor = Color.black.opacity(provider == .codex ? 1 : 0.9)
+        let trackColor = configuration.isOn ? SettingsTheme.toggleTrackOn : SettingsTheme.toggleTrackOff
+        let knobColor = configuration.isOn ? SettingsTheme.toggleKnobOn : SettingsTheme.toggleKnobOff
 
         return Button(action: {
             configuration.isOn.toggle()
@@ -63,48 +59,44 @@ struct ModelMeterToggleStyle: ToggleStyle {
 }
 
 struct PollIntervalSelector: View {
-    let provider: UsageProvider
     @Binding var selection: PollIntervalOption
+    @State private var hovered: PollIntervalOption?
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             ForEach(PollIntervalOption.allCases) { option in
+                let isActive = selection == option
+                let isHovered = hovered == option && !isActive
                 Button(option.label) {
                     selection = option
                 }
                 .font(ModelMeterTextStyles.body())
-                .foregroundStyle(selection == option ? Color.black : ProviderTheme.primaryText(provider))
+                .foregroundStyle(isActive ? SettingsTheme.segmentedActiveText : SettingsTheme.segmentedInactive)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(selection == option ? ProviderTheme.accent(provider) : Color.clear)
+                .background(isActive ? SettingsTheme.segmentedActive : isHovered ? SettingsTheme.segmentedActive.opacity(0.5) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                .onHover { hovering in hovered = hovering ? option : nil }
             }
         }
         .padding(4)
-        .background(ProviderTheme.subtleContainer(provider))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(ProviderTheme.border(provider), lineWidth: 1)
-        )
     }
 }
 
 struct ModelMeterFieldBox: View {
     let text: String
-    let provider: UsageProvider
 
     var body: some View {
         Text(text)
             .font(ModelMeterTextStyles.monoData())
-            .foregroundStyle(ProviderTheme.primaryText(provider))
+            .foregroundStyle(SettingsTheme.primaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(ProviderTheme.subtleContainer(provider))
+            .background(SettingsTheme.fieldBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(ProviderTheme.border(provider), lineWidth: 1)
+                    .stroke(SettingsTheme.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6))
     }
@@ -112,7 +104,7 @@ struct ModelMeterFieldBox: View {
 
 struct ModelMeterSecondaryButton: View {
     let title: String
-    let provider: UsageProvider
+    var provider: UsageProvider? = nil
     let action: () -> Void
 
     var body: some View {
@@ -121,12 +113,53 @@ struct ModelMeterSecondaryButton: View {
         }
         .buttonStyle(.plain)
         .font(ModelMeterTextStyles.body())
-        .foregroundStyle(ProviderTheme.secondaryText(provider))
+        .foregroundStyle(foregroundColor)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .background(provider == nil ? SettingsTheme.buttonBackground : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(ProviderTheme.border(provider), lineWidth: 1)
+                .stroke(borderColor, lineWidth: 1)
         )
+    }
+
+    private var foregroundColor: Color {
+        if let provider {
+            return ProviderTheme.secondaryText(provider)
+        }
+        return SettingsTheme.buttonText
+    }
+
+    private var borderColor: Color {
+        if let provider {
+            return ProviderTheme.border(provider)
+        }
+        return SettingsTheme.border
+    }
+}
+
+struct SettingsProviderPicker: View {
+    @Binding var selection: UsageProvider
+    @State private var hovered: UsageProvider?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(UsageProvider.allCases, id: \.self) { option in
+                let isActive = selection == option
+                let isHovered = hovered == option && !isActive
+                Button(option == .claude ? "Claude" : "OpenAI") {
+                    selection = option
+                }
+                .font(ModelMeterTextStyles.body())
+                .foregroundStyle(isActive ? SettingsTheme.segmentedActiveText : SettingsTheme.segmentedInactive)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(isActive ? SettingsTheme.segmentedActive : isHovered ? SettingsTheme.segmentedActive.opacity(0.5) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .onHover { hovering in hovered = hovering ? option : nil }
+            }
+        }
+        .padding(4)
     }
 }

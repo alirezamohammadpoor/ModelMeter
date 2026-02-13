@@ -1,120 +1,129 @@
+import Combine
 import XCTest
 @testable import ModelMeterApp
 
 @MainActor
 final class UpdateManagerTests: XCTestCase {
+
+    // MARK: - Version Utilities
+
     func testNormalizeVersionStripsVPrefix() {
-        XCTAssertEqual(UpdateCoordinator.normalizeVersion("v1.2.3"), "1.2.3")
-        XCTAssertEqual(UpdateCoordinator.normalizeVersion(" 2.0.0 "), "2.0.0")
+        XCTAssertEqual(UpdateManager.normalizeVersion("v1.2.3"), "1.2.3")
+        XCTAssertEqual(UpdateManager.normalizeVersion(" 2.0.0 "), "2.0.0")
     }
 
     func testCompareVersions() {
-        XCTAssertEqual(UpdateCoordinator.compareVersions("1.2.0", "1.1.9"), .orderedDescending)
-        XCTAssertEqual(UpdateCoordinator.compareVersions("1.2.0", "1.2.0"), .orderedSame)
-        XCTAssertEqual(UpdateCoordinator.compareVersions("1.2", "1.2.1"), .orderedAscending)
+        XCTAssertEqual(UpdateManager.compareVersions("1.2.0", "1.1.9"), .orderedDescending)
+        XCTAssertEqual(UpdateManager.compareVersions("1.2.0", "1.2.0"), .orderedSame)
+        XCTAssertEqual(UpdateManager.compareVersions("1.2", "1.2.1"), .orderedAscending)
     }
 
-    func testCoordinatorReturnsUpToDateWhenEqual() async {
-        let release = LatestRelease(tagName: "v1.0.0", htmlURL: URL(string: "https://example.com")!)
-        let service = MockReleaseService(result: .success(release))
-        let sparkle = MockSparkleUpdater()
-        let opener = MockReleasePageOpener()
-        let coordinator = UpdateCoordinator(releaseService: service, sparkleUpdater: sparkle, releasePageOpener: opener)
+    // MARK: - State Mapping
 
-        let result = await coordinator.checkNow(currentVersion: "1.0.0")
+    func testCheckingStateMapsToIsChecking() {
+        let driver = MockSparkleDriver()
+        let manager = UpdateManager(sparkleDriver: driver)
 
-        XCTAssertEqual(result, .upToDate(current: "1.0.0"))
-        XCTAssertEqual(sparkle.checkForUpdatesCallCount, 0)
-        XCTAssertNil(opener.openedURL)
+        driver.pushState(.checking)
+
+        XCTAssertTrue(manager.isChecking)
+        XCTAssertEqual(manager.statusText, "Checking for updates...")
+        XCTAssertEqual(manager.statusLevel, .info)
     }
 
-    func testCoordinatorTriggersUpdaterWhenNewer() async {
-        let release = LatestRelease(tagName: "v1.2.0", htmlURL: URL(string: "https://example.com")!)
-        let service = MockReleaseService(result: .success(release))
-        let sparkle = MockSparkleUpdater()
-        let opener = MockReleasePageOpener()
-        let coordinator = UpdateCoordinator(releaseService: service, sparkleUpdater: sparkle, releasePageOpener: opener)
+    func testAvailableStateMapsToWarning() {
+        let driver = MockSparkleDriver()
+        let manager = UpdateManager(sparkleDriver: driver)
 
-        let result = await coordinator.checkNow(currentVersion: "1.0.0")
+        driver.pushState(.available(version: "2.0.0"))
 
-        if FeatureFlags.useSparkleUpdater {
-            XCTAssertEqual(sparkle.checkForUpdatesCallCount, 1)
-            XCTAssertEqual(result, .updateAvailable(latest: "v1.2.0"))
-        } else {
-            XCTAssertEqual(sparkle.checkForUpdatesCallCount, 0)
-            XCTAssertEqual(result, .updateAvailable(latest: "v1.2.0"))
-            XCTAssertEqual(opener.openedURL, release.htmlURL)
-        }
+        XCTAssertFalse(manager.isChecking)
+        XCTAssertEqual(manager.statusText, "Update available (v2.0.0).")
+        XCTAssertEqual(manager.statusLevel, .warning)
     }
 
-    func testCoordinatorFallsBackToReleasePageWhenSparkleFails() async {
-        let release = LatestRelease(tagName: "v1.2.0", htmlURL: URL(string: "https://example.com")!)
-        let service = MockReleaseService(result: .success(release))
-        let sparkle = MockSparkleUpdater(error: NSError(domain: "test", code: 1))
-        let opener = MockReleasePageOpener()
-        let coordinator = UpdateCoordinator(releaseService: service, sparkleUpdater: sparkle, releasePageOpener: opener)
+    func testUpToDateStateMapsToSuccess() {
+        let driver = MockSparkleDriver()
+        let manager = UpdateManager(sparkleDriver: driver)
 
-        let result = await coordinator.checkNow(currentVersion: "1.0.0")
+        driver.pushState(.upToDate)
 
-        if FeatureFlags.useSparkleUpdater {
-            XCTAssertEqual(sparkle.checkForUpdatesCallCount, 1)
-            XCTAssertEqual(opener.openedURL, release.htmlURL)
-            XCTAssertEqual(result, .error(message: "Sparkle failed to start update. Opened release page instead."))
-        } else {
-            XCTAssertEqual(sparkle.checkForUpdatesCallCount, 0)
-            XCTAssertEqual(opener.openedURL, release.htmlURL)
-            XCTAssertEqual(result, .updateAvailable(latest: "v1.2.0"))
-        }
+        XCTAssertFalse(manager.isChecking)
+        XCTAssertTrue(manager.statusText.contains("Up to date"))
+        XCTAssertEqual(manager.statusLevel, .success)
     }
 
-    func testCoordinatorReturnsErrorOnNetworkFailure() async {
-        let service = MockReleaseService(result: .failure(NSError(domain: "test", code: 403)))
-        let sparkle = MockSparkleUpdater()
-        let opener = MockReleasePageOpener()
-        let coordinator = UpdateCoordinator(releaseService: service, sparkleUpdater: sparkle, releasePageOpener: opener)
+    func testFailedStateMapsToError() {
+        let driver = MockSparkleDriver()
+        let manager = UpdateManager(sparkleDriver: driver)
 
-        let result = await coordinator.checkNow(currentVersion: "1.0.0")
+        driver.pushState(.failed(message: "Network error"))
 
-        switch result {
-        case let .error(message):
-            XCTAssertTrue(message.contains("Update check failed"))
-        default:
-            XCTFail("Expected error result")
-        }
+        XCTAssertFalse(manager.isChecking)
+        XCTAssertEqual(manager.statusText, "Network error")
+        XCTAssertEqual(manager.statusLevel, .error)
+    }
+
+    func testIdleStateClearsStatus() {
+        let driver = MockSparkleDriver()
+        let manager = UpdateManager(sparkleDriver: driver)
+
+        driver.pushState(.checking)
+        XCTAssertTrue(manager.isChecking)
+
+        driver.pushState(.idle)
+
+        XCTAssertFalse(manager.isChecking)
+        XCTAssertEqual(manager.statusText, "")
+        XCTAssertEqual(manager.statusLevel, .none)
+    }
+
+    // MARK: - checkForUpdates Routing
+
+    func testCheckForUpdatesCallsDriverWhenCanCheck() {
+        let driver = MockSparkleDriver(canCheck: true)
+        let manager = UpdateManager(sparkleDriver: driver)
+
+        manager.checkForUpdates()
+
+        XCTAssertEqual(driver.checkForUpdatesCallCount, 1)
+    }
+
+    func testCheckForUpdatesFallsBackWhenCannotCheck() {
+        let driver = MockSparkleDriver(canCheck: false)
+        let manager = UpdateManager(sparkleDriver: driver)
+
+        manager.checkForUpdates()
+
+        XCTAssertEqual(driver.checkForUpdatesCallCount, 0)
     }
 }
 
-private struct MockReleaseService: GitHubReleaseChecking {
-    let result: Result<LatestRelease, Error>
-
-    func fetchLatestRelease() async throws -> LatestRelease {
-        try result.get()
-    }
-}
+// MARK: - Mock
 
 @MainActor
-private final class MockSparkleUpdater: SparkleUpdating {
+private final class MockSparkleDriver: SparkleUpdateDriving {
+    private let stateSubject = CurrentValueSubject<SparkleUpdateState, Never>(.idle)
     private(set) var checkForUpdatesCallCount = 0
-    private let error: Error?
+    private let _canCheck: Bool
 
-    init(error: Error? = nil) {
-        self.error = error
+    var statePublisher: AnyPublisher<SparkleUpdateState, Never> {
+        stateSubject.eraseToAnyPublisher()
     }
 
-    func checkForUpdates() throws {
+    var canCheck: Bool { _canCheck }
+
+    init(canCheck: Bool = false) {
+        _canCheck = canCheck
+    }
+
+    func start() {}
+
+    func checkForUpdates() {
         checkForUpdatesCallCount += 1
-        if let error {
-            throw error
-        }
     }
 
-    func checkForUpdatesInBackground() throws {}
-}
-
-private final class MockReleasePageOpener: ReleasePageOpening {
-    private(set) var openedURL: URL?
-
-    func openReleasePage(_ url: URL) {
-        openedURL = url
+    func pushState(_ state: SparkleUpdateState) {
+        stateSubject.send(state)
     }
 }

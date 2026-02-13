@@ -35,7 +35,7 @@ struct UsageActionsView: View {
 
             Spacer()
 
-            SettingsLink {
+            Button(action: openSettings) {
                 HStack(spacing: 6) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 12, weight: .light))
@@ -56,5 +56,17 @@ struct UsageActionsView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private func openSettings() {
+        if let appDelegate = AppDelegate.shared {
+            appDelegate.openSettingsWindow()
+            return
+        }
+        NSLog("openSettings: AppDelegate.shared is nil, using fallback")
+        NSApp.activate(ignoringOtherApps: true)
+        let openedSwiftUISettings = NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        if openedSwiftUISettings { return }
+        _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
     }
 }

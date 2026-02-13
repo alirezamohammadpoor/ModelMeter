@@ -1,17 +1,29 @@
 import AppKit
 import ModelMeterCore
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static private(set) var shared: AppDelegate?
+
     private var statusBarController: StatusBarController?
-    private weak var store: UsageStore?
+    private var store: UsageStore?
     private weak var viewModel: MenuViewModel?
     private weak var notifications: NotificationManager?
+    private var settingsStore: SettingsStore?
+    private var settingsWindow: NSWindow?
 
-    func configure(store: UsageStore, viewModel: MenuViewModel, notifications: NotificationManager) {
+    func configure(
+        store: UsageStore,
+        viewModel: MenuViewModel,
+        notifications: NotificationManager,
+        settingsStore: SettingsStore
+    ) {
         self.store = store
         self.viewModel = viewModel
         self.notifications = notifications
+        self.settingsStore = settingsStore
+        AppDelegate.shared = self
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -25,10 +37,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await self?.notifications?.requestAuthorization()
         }
         store?.start()
+        UpdateManager.shared.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         store?.stop()
+    }
+
+    @objc func openModelMeterSettings(_ sender: Any?) {
+        openSettingsWindow()
+    }
+
+    func openSettingsWindow() {
+        guard let store, let settingsStore else {
+            NSLog("openSettingsWindow: store or settingsStore is nil")
+            return
+        }
+
+        if settingsWindow == nil {
+            let settingsView = SettingsView(
+                store: store,
+                settings: settingsStore
+            )
+            let hosting = NSHostingController(rootView: settingsView)
+
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 420, height: 520),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "ModelMeter Settings"
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.contentViewController = hosting
+            window.delegate = self
+            settingsWindow = window
+        }
+
+        NSApp.setActivationPolicy(.regular)
+        DispatchQueue.main.async { [weak self] in
+            NSApp.activate(ignoringOtherApps: true)
+            self?.settingsWindow?.orderFrontRegardless()
+            self?.settingsWindow?.makeKeyAndOrderFront(nil)
+        }
     }
 
     private func ensureDefaultConfig() {
@@ -145,5 +197,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return nil
+    }
+}
+
+extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        guard (notification.object as? NSWindow) === settingsWindow else { return }
+        settingsWindow = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            let hasVisibleWindows = NSApp.windows.contains {
+                $0.isVisible && $0 !== notification.object as? NSWindow
+            }
+            if !hasVisibleWindows {
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
     }
 }

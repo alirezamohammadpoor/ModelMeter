@@ -13,6 +13,11 @@ enum ModelMeterColors {
     static let claudeContainerHover = Color(hex: 0x3A3A39)
     static let claudeError = Color(hex: 0xBF4D43)
 
+    // Neutral
+    static let cloudMedium = Color(hex: 0x91918D)
+    static let ivoryDark   = Color(hex: 0xE5E4DF)
+    static let slateDark   = Color(hex: 0x191919)
+
     // Codex / OpenAI
     static let codexPrimary = Color.white
     static let codexSecondary = Color.white.opacity(0.60)
@@ -125,6 +130,26 @@ enum ProviderTheme {
         case .codex: return Color.white
         }
     }
+}
+
+enum SettingsTheme {
+    static let windowBackground    = ModelMeterColors.slateDark          // #191919
+    static let sectionBackground   = ModelMeterColors.claudeContainer    // #262625
+    static let sectionHeader       = ModelMeterColors.cloudMedium        // #91918D
+    static let primaryText         = ModelMeterColors.claudeText         // #FAFAF7
+    static let secondaryText       = ModelMeterColors.claudeCloudLight   // #BFBFBA
+    static let segmentedContainer  = ModelMeterColors.claudeContainer    // #262625
+    static let segmentedActive     = ModelMeterColors.claudeSlateLight   // #40403E
+    static let segmentedActiveText = ModelMeterColors.claudeText         // #FAFAF7
+    static let segmentedInactive   = ModelMeterColors.claudeCloudLight   // #BFBFBA
+    static let toggleTrackOff      = ModelMeterColors.claudeSlateLight   // #40403E
+    static let toggleTrackOn       = ModelMeterColors.cloudMedium        // #91918D
+    static let toggleKnobOff       = ModelMeterColors.cloudMedium        // #91918D
+    static let toggleKnobOn        = ModelMeterColors.ivoryDark          // #E5E4DF
+    static let border              = ModelMeterColors.claudeSlateLight   // #40403E
+    static let buttonText          = ModelMeterColors.claudeText         // #FAFAF7
+    static let buttonBackground    = ModelMeterColors.claudeContainer    // #262625
+    static let fieldBackground     = ModelMeterColors.slateDark          // #191919
 }
 
 enum ModelMeterMotion {

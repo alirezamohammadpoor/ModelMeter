@@ -1,107 +1,125 @@
 import AppKit
+import Combine
 import Foundation
 
-enum UpdateCheckResult: Equatable {
-    case upToDate(current: String)
-    case updateAvailable(latest: String)
-    case error(message: String)
-}
+// MARK: - UpdateManager
 
-struct LatestRelease: Equatable {
-    let tagName: String
-    let htmlURL: URL
-}
-
-protocol GitHubReleaseChecking {
-    func fetchLatestRelease() async throws -> LatestRelease
+enum UpdateStatusLevel {
+    case none, info, success, warning, error
 }
 
 @MainActor
-protocol SparkleUpdating {
-    func checkForUpdates() throws
-    func checkForUpdatesInBackground() throws
-}
+@Observable
+final class UpdateManager {
+    static let shared = UpdateManager()
 
-protocol ReleasePageOpening {
-    func openReleasePage(_ url: URL)
-}
+    private(set) var statusText: String = ""
+    private(set) var statusLevel: UpdateStatusLevel = .none
+    private(set) var isChecking: Bool = false
 
-struct ReleasePageOpener: ReleasePageOpening {
-    func openReleasePage(_ url: URL) {
-        NSWorkspace.shared.open(url)
-    }
-}
+    private let sparkleDriver: SparkleUpdateDriving
+    private var cancellables = Set<AnyCancellable>()
 
-struct GitHubReleaseService: GitHubReleaseChecking {
-    private let releasesURL = URL(string: "https://api.github.com/repos/alirezamohammadpoor/ModelMeter/releases/latest")!
-    private let session: URLSession
-
-    init(session: URLSession = .shared) {
-        self.session = session
-    }
-
-    func fetchLatestRelease() async throws -> LatestRelease {
-        var request = URLRequest(url: releasesURL)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 15
-
-        let (data, response) = try await session.data(for: request)
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw NSError(domain: "UpdateManager", code: http.statusCode, userInfo: [
-                NSLocalizedDescriptionKey: "GitHub API returned \(http.statusCode)."
-            ])
+    init(sparkleDriver: SparkleUpdateDriving? = nil) {
+        if let sparkleDriver {
+            self.sparkleDriver = sparkleDriver
+        } else if FeatureFlags.useSparkleUpdater {
+            self.sparkleDriver = SparkleDriver()
+        } else {
+            self.sparkleDriver = NoopSparkleDriver()
         }
-
-        let payload = try JSONDecoder().decode(LatestReleasePayload.self, from: data)
-        return LatestRelease(tagName: payload.tagName, htmlURL: payload.htmlURL)
-    }
-}
-
-@MainActor
-struct UpdateCoordinator {
-    let releaseService: GitHubReleaseChecking
-    let sparkleUpdater: SparkleUpdating?
-    let releasePageOpener: ReleasePageOpening
-
-    init(
-        releaseService: GitHubReleaseChecking = GitHubReleaseService(),
-        sparkleUpdater: SparkleUpdating? = nil,
-        releasePageOpener: ReleasePageOpening = ReleasePageOpener()
-    ) {
-        self.releaseService = releaseService
-        self.sparkleUpdater = sparkleUpdater
-        self.releasePageOpener = releasePageOpener
+        subscribeToSparkleState()
     }
 
-    func checkNow(currentVersion: String) async -> UpdateCheckResult {
+    func start() {
+        sparkleDriver.start()
+    }
+
+    func checkForUpdates() {
+        if sparkleDriver.canCheck {
+            sparkleDriver.checkForUpdates()
+        } else {
+            Task {
+                await checkViaGitHub()
+            }
+        }
+    }
+
+    static var appVersion: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short = (info["CFBundleShortVersionString"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let short, !short.isEmpty { return short }
+        let build = (info["CFBundleVersion"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (build?.isEmpty == false) ? build! : AppConstants.fallbackVersion
+    }
+
+    // MARK: - Private
+
+    private func subscribeToSparkleState() {
+        sparkleDriver.statePublisher
+            .sink { [weak self] state in
+                self?.applyState(state)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func applyState(_ state: SparkleUpdateState) {
+        switch state {
+        case .idle:
+            statusText = ""
+            statusLevel = .none
+            isChecking = false
+        case .checking:
+            statusText = "Checking for updates..."
+            statusLevel = .info
+            isChecking = true
+        case .available(let version):
+            statusText = "Update available (v\(version))."
+            statusLevel = .warning
+            isChecking = false
+        case .upToDate:
+            statusText = "Up to date (v\(Self.appVersion))."
+            statusLevel = .success
+            isChecking = false
+        case .failed(let message):
+            statusText = message
+            statusLevel = .error
+            isChecking = false
+        }
+    }
+
+    private func checkViaGitHub() async {
+        statusText = "Checking for updates..."
+        statusLevel = .info
+        isChecking = true
+
         do {
-            let latest = try await releaseService.fetchLatestRelease()
+            let latest = try await GitHubReleaseService().fetchLatestRelease()
             let normalizedLatest = Self.normalizeVersion(latest.tagName)
-            let normalizedCurrent = Self.normalizeVersion(currentVersion)
+            let normalizedCurrent = Self.normalizeVersion(Self.appVersion)
 
             guard !normalizedLatest.isEmpty, !normalizedCurrent.isEmpty else {
-                return .error(message: "Unable to parse app version.")
+                statusText = "Unable to parse app version."
+                statusLevel = .error
+                isChecking = false
+                return
             }
 
             if Self.compareVersions(normalizedLatest, normalizedCurrent) == .orderedDescending {
-                guard FeatureFlags.useSparkleUpdater, let sparkleUpdater else {
-                    releasePageOpener.openReleasePage(latest.htmlURL)
-                    return .updateAvailable(latest: latest.tagName)
-                }
-
-                do {
-                    try sparkleUpdater.checkForUpdates()
-                    return .updateAvailable(latest: latest.tagName)
-                } catch {
-                    releasePageOpener.openReleasePage(latest.htmlURL)
-                    return .error(message: "Sparkle failed to start update. Opened release page instead.")
-                }
+                NSWorkspace.shared.open(latest.htmlURL)
+                statusText = "Update available (\(latest.tagName)). Opening release page..."
+                statusLevel = .warning
+            } else {
+                statusText = "Up to date (v\(Self.appVersion))."
+                statusLevel = .success
             }
-
-            return .upToDate(current: currentVersion)
         } catch {
-            return .error(message: "Update check failed: \(error.localizedDescription)")
+            statusText = "Update check failed: \(error.localizedDescription)"
+            statusLevel = .error
         }
+        isChecking = false
     }
 
     static func normalizeVersion(_ value: String) -> String {
@@ -125,16 +143,46 @@ struct UpdateCoordinator {
     }
 }
 
+// MARK: - Supporting Types
+
 enum FeatureFlags {
     static let useSparkleUpdater: Bool = {
-#if DEBUG
-        // Debug default off; set USE_SPARKLE_UPDATER=1 to test Sparkle locally.
-        return ProcessInfo.processInfo.environment["USE_SPARKLE_UPDATER"] == "1"
-#else
-        // Release default on; set USE_SPARKLE_UPDATER=0 to force GitHub-page fallback.
         return ProcessInfo.processInfo.environment["USE_SPARKLE_UPDATER"] != "0"
-#endif
     }()
+}
+
+enum AppConstants {
+    static let fallbackVersion = "1.0.0"
+}
+
+struct LatestRelease: Equatable {
+    let tagName: String
+    let htmlURL: URL
+}
+
+struct GitHubReleaseService {
+    private let releasesURL = URL(string: "https://api.github.com/repos/alirezamohammadpoor/ModelMeter/releases/latest")!
+    private let session: URLSession
+
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
+
+    func fetchLatestRelease() async throws -> LatestRelease {
+        var request = URLRequest(url: releasesURL)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 15
+
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw NSError(domain: "UpdateManager", code: http.statusCode, userInfo: [
+                NSLocalizedDescriptionKey: "GitHub API returned \(http.statusCode)."
+            ])
+        }
+
+        let payload = try JSONDecoder().decode(LatestReleasePayload.self, from: data)
+        return LatestRelease(tagName: payload.tagName, htmlURL: payload.htmlURL)
+    }
 }
 
 private struct LatestReleasePayload: Decodable {

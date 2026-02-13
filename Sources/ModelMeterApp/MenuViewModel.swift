@@ -24,11 +24,11 @@ final class MenuViewModel {
     }
 
     private var currentSnapshot: UsageSnapshot? {
-        store.snapshots[store.selectedProvider]
+        store.snapshots[settings.selectedProvider]
     }
 
     private var currentError: String? {
-        store.errors[store.selectedProvider]
+        store.errors[settings.selectedProvider]
     }
 
     var sessionText: String {
@@ -143,7 +143,8 @@ final class MenuViewModel {
 
     func refreshNow() {
         Task { [weak self] in
-            await self?.store.refresh()
+            guard let self else { return }
+            await self.store.refresh(provider: self.settings.selectedProvider)
         }
     }
 

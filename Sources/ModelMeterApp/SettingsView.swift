@@ -5,75 +5,64 @@ import SwiftUI
 struct SettingsView: View {
     let store: UsageStore
     @Bindable var settings: SettingsStore
-    let updateCoordinator: UpdateCoordinator
+    @State private var updateManager = UpdateManager.shared
     @State private var configStatus: String?
-    @State private var updateStatusText: String?
-
-    private var provider: UsageProvider {
-        settings.selectedProvider
-    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Settings")
                     .font(ModelMeterTextStyles.body())
-                    .foregroundStyle(ProviderTheme.primaryText(provider))
+                    .foregroundStyle(SettingsTheme.primaryText)
                 Spacer()
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
             .padding(.bottom, 8)
 
-            SettingsSectionHeader(title: "General", provider: provider)
+            SettingsSectionHeader(title: "General")
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Polling interval")
                         .font(ModelMeterTextStyles.body())
-                        .foregroundStyle(ProviderTheme.primaryText(provider))
+                        .foregroundStyle(SettingsTheme.primaryText)
                     Spacer()
-                    PollIntervalSelector(provider: provider, selection: $settings.pollInterval)
+                    PollIntervalSelector(selection: $settings.pollInterval)
                 }
                 .padding(.horizontal, 16)
 
                 HStack {
                     Text("Provider")
                         .font(ModelMeterTextStyles.body())
-                        .foregroundStyle(ProviderTheme.primaryText(provider))
+                        .foregroundStyle(SettingsTheme.primaryText)
                     Spacer()
-                    Picker("Provider", selection: $settings.selectedProvider) {
-                        ForEach(UsageProvider.allCases, id: \.self) { provider in
-                            Text(provider == .claude ? "Claude" : "OpenAI").tag(provider)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
+                    SettingsProviderPicker(selection: $settings.selectedProvider)
                 }
                 .padding(.horizontal, 16)
 
-                ModelMeterToggleRow(title: "Launch at login", provider: provider, isOn: $settings.launchAtLogin)
+                ModelMeterToggleRow(title: "Launch at login", isOn: $settings.launchAtLogin)
             }
             divider
 
-            SettingsSectionHeader(title: "Notifications", provider: provider)
+            SettingsSectionHeader(title: "Notifications")
             VStack(spacing: 0) {
-                ModelMeterToggleRow(title: "60% warning", provider: provider, isOn: $settings.notifyAt60)
-                ModelMeterToggleRow(title: "80% warning", provider: provider, isOn: $settings.notifyAt80)
-                ModelMeterToggleRow(title: "90% critical", provider: provider, isOn: $settings.notifyAt90)
+                ModelMeterToggleRow(title: "60% warning", isOn: $settings.notifyAt60)
+                ModelMeterToggleRow(title: "80% warning", isOn: $settings.notifyAt80)
+                ModelMeterToggleRow(title: "90% critical", isOn: $settings.notifyAt90)
             }
             divider
 
-            SettingsSectionHeader(title: "Advanced", provider: provider)
+            SettingsSectionHeader(title: "Advanced")
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Config path")
                         .font(ModelMeterTextStyles.secondary())
-                        .foregroundStyle(ProviderTheme.secondaryText(provider))
-                    ModelMeterFieldBox(text: configPath, provider: provider)
+                        .foregroundStyle(SettingsTheme.secondaryText)
+                    ModelMeterFieldBox(text: configPath)
                 }
                 .padding(.horizontal, 16)
 
-                ModelMeterSecondaryButton(title: "Create default config", provider: provider) {
+                ModelMeterSecondaryButton(title: "Create default config") {
                     configStatus = createDefaultConfig()
                 }
                 .padding(.horizontal, 16)
@@ -81,44 +70,38 @@ struct SettingsView: View {
                 if let configStatus {
                     Text(configStatus)
                         .font(ModelMeterTextStyles.secondary())
-                        .foregroundStyle(ProviderTheme.secondaryText(provider))
+                        .foregroundStyle(SettingsTheme.secondaryText)
                         .padding(.horizontal, 16)
                 }
 
-                ModelMeterSecondaryButton(title: "Check for Updates", provider: provider) {
-                    Task {
-                        let currentVersion = appVersion
-                        updateStatusText = "Checking GitHub releases..."
-                        let result = await updateCoordinator.checkNow(currentVersion: currentVersion)
-                        switch result {
-                        case let .upToDate(current):
-                            updateStatusText = "You are up to date (v\(current))."
-                        case let .updateAvailable(latest):
-                            updateStatusText = "New version found (\(latest)). Starting updater..."
-                        case let .error(message):
-                            updateStatusText = message
-                        }
-                    }
+                ModelMeterSecondaryButton(title: "Check for Updates") {
+                    updateManager.checkForUpdates()
                 }
+                .disabled(updateManager.isChecking)
                 .padding(.horizontal, 16)
 
-                if let updateStatusText {
-                    Text(updateStatusText)
+                if !updateManager.statusText.isEmpty {
+                    Text(updateManager.statusText)
                         .font(ModelMeterTextStyles.secondary())
-                        .foregroundStyle(ProviderTheme.secondaryText(provider))
+                        .foregroundStyle(SettingsTheme.secondaryText)
                         .padding(.horizontal, 16)
                 }
             }
-            .padding(.bottom, 16)
+            .padding(.bottom, 8)
+
+            Text("ModelMeter v\(UpdateManager.appVersion)")
+                .font(ModelMeterTextStyles.secondary())
+                .foregroundStyle(SettingsTheme.secondaryText)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 12)
         }
-        .background(.regularMaterial)
+        .background(SettingsTheme.windowBackground)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(ProviderTheme.border(provider), lineWidth: 1)
+                .stroke(SettingsTheme.border, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .frame(width: 400)
-        .animation(ModelMeterMotion.themeSwitch, value: provider)
     }
 
     private func createDefaultConfig() -> String {
@@ -172,19 +155,9 @@ struct SettingsView: View {
         ConfigStore.defaultURL().path
     }
 
-    private var appVersion: String {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let short = (info["CFBundleShortVersionString"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let short, !short.isEmpty {
-            return short
-        }
-        let build = (info["CFBundleVersion"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (build?.isEmpty == false) ? build! : "dev"
-    }
-
     private var divider: some View {
         Rectangle()
-            .fill(ProviderTheme.border(provider))
+            .fill(SettingsTheme.border)
             .frame(height: 1)
             .padding(.vertical, 8)
     }

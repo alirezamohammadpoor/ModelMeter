@@ -8,7 +8,6 @@ struct ModelMeterApp: App {
     @State private var settings: SettingsStore
     @State private var viewModel: MenuViewModel
     @State private var notifications: NotificationManager
-    @State private var updateCoordinator: UpdateCoordinator
 
     init() {
         FontRegistrar.registerBundledFonts()
@@ -16,23 +15,21 @@ struct ModelMeterApp: App {
         let store = UsageStore(pollInterval: settings.pollInterval.seconds)
         let notifications = NotificationManager()
         let viewModel = MenuViewModel(store: store, settings: settings, notifications: notifications)
-        let sparkleUpdater = SparkleUpdateService()
-        let updateCoordinator = UpdateCoordinator(
-            releaseService: GitHubReleaseService(),
-            sparkleUpdater: sparkleUpdater,
-            releasePageOpener: ReleasePageOpener()
-        )
         _store = State(wrappedValue: store)
         _settings = State(wrappedValue: settings)
         _notifications = State(wrappedValue: notifications)
         _viewModel = State(wrappedValue: viewModel)
-        _updateCoordinator = State(wrappedValue: updateCoordinator)
-        appDelegate.configure(store: store, viewModel: viewModel, notifications: notifications)
+        appDelegate.configure(
+            store: store,
+            viewModel: viewModel,
+            notifications: notifications,
+            settingsStore: settings
+        )
     }
 
     var body: some Scene {
         Settings {
-            SettingsView(store: store, settings: settings, updateCoordinator: updateCoordinator)
+            SettingsView(store: store, settings: settings)
         }
     }
 }
