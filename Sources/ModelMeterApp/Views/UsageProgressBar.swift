@@ -8,15 +8,15 @@ struct UsageProgressBar: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: ModelMeterLayout.progressRadius)
                     .fill(trackColor)
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: ModelMeterLayout.progressRadius)
                     .fill(color)
                     .frame(width: proxy.size.width * max(0, min(1, progress)))
-                    .animation(.easeOut(duration: 0.2), value: progress)
+                    .animation(ModelMeterMotion.progressChange, value: progress)
             }
         }
-        .frame(height: 4)
-        .clipShape(RoundedRectangle(cornerRadius: 2))
+        .frame(height: ModelMeterLayout.progressHeight)
+        .clipShape(RoundedRectangle(cornerRadius: ModelMeterLayout.progressRadius))
     }
 }

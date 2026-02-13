@@ -33,13 +33,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func ensureDefaultConfig() {
         let configStore = ConfigStore()
-        let fileManager = FileManager.default
-        let scriptsRoot = Bundle.main.resourceURL?.appendingPathComponent("ModelMeterScripts")
-        let claudePath = scriptsRoot?.appendingPathComponent("claude_usage.py").path
-        let codexPath = scriptsRoot?.appendingPathComponent("codex_usage.py").path
+        do {
+            try configStore.migrateDeprecatedFields()
+        } catch {
+            NSLog("Failed to migrate deprecated config fields: %@", error.localizedDescription)
+        }
 
-        let bundledClaude = (claudePath.flatMap { fileManager.fileExists(atPath: $0) } == true) ? claudePath : nil
-        let bundledCodex = (codexPath.flatMap { fileManager.fileExists(atPath: $0) } == true) ? codexPath : nil
+        let fileManager = FileManager.default
+        let bundledClaude = bundledScriptPath(fileName: "claude_usage.py")
+        let bundledCodex = bundledScriptPath(fileName: "codex_usage.py")
 
         if let existing = try? configStore.load() {
             var updated = existing
@@ -116,9 +118,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldReplaceBundled(command: String) -> Bool {
         let normalized = command.trimmingCharacters(in: .whitespacesAndNewlines)
         let isOldBundled = normalized.contains(".app/Contents/Resources/MenuUsageScripts")
-        let isNewBundled = normalized.contains(".app/Contents/Resources/ModelMeterScripts")
-        guard isOldBundled || isNewBundled else { return false }
+        let isLegacyModelMeter = normalized.contains(".app/Contents/Resources/ModelMeterScripts")
+        let isSwiftPMBundle = normalized.contains("ModelMeter_ModelMeterApp.bundle")
+        guard isOldBundled || isLegacyModelMeter || isSwiftPMBundle else { return false }
         let bundlePath = Bundle.main.bundleURL.path
-        return isOldBundled || !normalized.hasPrefix(bundlePath)
+        return isOldBundled || !normalized.hasPrefix(bundlePath) || !FileManager.default.fileExists(atPath: normalized)
+    }
+
+    private func bundledScriptPath(fileName: String) -> String? {
+        let fileManager = FileManager.default
+        let resourceRoots = [
+            Bundle.module.resourceURL,
+            Bundle.main.resourceURL
+        ]
+
+        for root in resourceRoots {
+            guard let root else { continue }
+            let candidates = [
+                root.appendingPathComponent("ModelMeterScripts", isDirectory: true).appendingPathComponent(fileName),
+                root.appendingPathComponent(fileName)
+            ]
+
+            for candidate in candidates where fileManager.fileExists(atPath: candidate.path) {
+                return candidate.path
+            }
+        }
+
+        return nil
     }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Observation
+import ModelMeterCore
 
 private class PopoverPanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -18,8 +19,8 @@ final class StatusBarController: NSObject {
         self.viewModel = viewModel
         super.init()
         let button = statusItem.button
-        button?.imagePosition = .imageOnly
-        button?.title = ""
+        button?.imagePosition = .imageLeft
+        button?.appearance = NSAppearance(named: .darkAqua)
         button?.target = self
         button?.action = #selector(togglePopover)
 
@@ -30,9 +31,6 @@ final class StatusBarController: NSObject {
     @objc private func togglePopover() {
         guard let button = statusItem.button else { return }
 
-        // The global monitor fires before this action when clicking the
-        // status-bar button while the panel is open, which closes the panel.
-        // Guard against immediately re-opening it.
         if let t = lastCloseTime, Date().timeIntervalSince(t) < 0.3 {
             lastCloseTime = nil
             return
@@ -61,7 +59,6 @@ final class StatusBarController: NSObject {
         panel.hasShadow = true
         panel.contentView = hostingView
 
-        // Position below the status-bar button, centred horizontally
         guard let buttonWindow = button.window else { return }
         let buttonRect = button.convert(button.bounds, to: nil)
         let screenRect = buttonWindow.convertToScreen(buttonRect)
@@ -73,14 +70,12 @@ final class StatusBarController: NSObject {
         panel.makeKeyAndOrderFront(nil)
         self.panel = panel
 
-        // Dismiss on click outside
         globalMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
             self?.closePanel()
         }
 
-        // Dismiss when another window becomes key
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(panelDidResignKey),
@@ -112,6 +107,7 @@ final class StatusBarController: NSObject {
         withObservationTracking {
             _ = viewModel.sessionPercentValue
             _ = viewModel.weeklyPercentValue
+            _ = viewModel.selectedProvider
         } onChange: { [weak self] in
             guard let self else { return }
             Task { @MainActor in
@@ -123,13 +119,20 @@ final class StatusBarController: NSObject {
 
     private func updateStatusIcon() {
         guard let button = statusItem.button else { return }
-        let session = viewModel.sessionPercentValue ?? 0
-        let weekly = viewModel.weeklyPercentValue ?? 0
-        let rendered = StatusIconRenderer.render(sessionPercent: session, weeklyPercent: weekly)
-        button.image = rendered.image
-        button.contentTintColor = rendered.isTemplate ? nil : NSColor.clear
+        let session = viewModel.sessionPercentValue
+        let weekly = viewModel.weeklyPercentValue
+        let rendered = StatusIconRenderer.render(
+            provider: viewModel.selectedProvider,
+            sessionPercent: session,
+            weeklyPercent: weekly)
 
-        let eitherCritical = session >= 95 || weekly >= 95
+        button.image = rendered.image
+        button.image?.isTemplate = false
+        button.contentTintColor = nil
+        button.attributedTitle = rendered.title
+
+        let eitherCritical = (session ?? 0) >= Double(UsageThresholds.critical90)
+            || (weekly ?? 0) >= Double(UsageThresholds.critical90)
         if eitherCritical {
             addPulseAnimationIfNeeded(to: button)
         } else {

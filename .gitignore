@@ -1,5 +1,8 @@
 .build/
+build/
 ModelMeter.app/
 .DS_Store
 *.xcodeproj
 xcuserdata/
+__pycache__/
+*.pyc

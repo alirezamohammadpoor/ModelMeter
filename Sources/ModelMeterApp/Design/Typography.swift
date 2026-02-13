@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum VercelFonts {
+enum ModelMeterFonts {
     static func geistSans(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         Font.custom("Geist Sans", size: size).weight(weight)
     }
@@ -10,32 +10,34 @@ enum VercelFonts {
     }
 }
 
-enum VercelTextStyles {
+enum ModelMeterTextStyles {
+    // Geist Mono: percentages and countdown/timer values.
     static func metricValue() -> Font {
-        VercelFonts.geistMono(32, weight: .medium)
-    }
-
-    static func label() -> Font {
-        VercelFonts.geistSans(11, weight: .regular)
-    }
-
-    static func sectionHeader() -> Font {
-        VercelFonts.geistSans(11, weight: .medium)
-    }
-
-    static func body() -> Font {
-        VercelFonts.geistSans(13, weight: .regular)
-    }
-
-    static func secondary() -> Font {
-        VercelFonts.geistSans(12, weight: .regular)
-    }
-
-    static func monoData() -> Font {
-        VercelFonts.geistMono(12, weight: .regular)
+        ModelMeterFonts.geistMono(42, weight: .medium)
     }
 
     static func monoCaption() -> Font {
-        VercelFonts.geistMono(11, weight: .regular)
+        ModelMeterFonts.geistMono(12, weight: .regular)
+    }
+
+    // Geist Sans: UI labels and controls.
+    static func label() -> Font {
+        ModelMeterFonts.geistSans(13, weight: .regular)
+    }
+
+    static func sectionHeader() -> Font {
+        ModelMeterFonts.geistSans(12, weight: .medium)
+    }
+
+    static func body() -> Font {
+        ModelMeterFonts.geistSans(13, weight: .regular)
+    }
+
+    static func secondary() -> Font {
+        ModelMeterFonts.geistSans(13, weight: .regular)
+    }
+
+    static func monoData() -> Font {
+        ModelMeterFonts.geistMono(12, weight: .regular)
     }
 }

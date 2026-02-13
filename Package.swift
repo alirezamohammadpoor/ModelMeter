@@ -10,13 +10,22 @@ let package = Package(
         .executable(name: "ModelMeterApp", targets: ["ModelMeterApp"]),
         .library(name: "ModelMeterCore", targets: ["ModelMeterCore"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.6.4")
+    ],
     targets: [
         .target(
             name: "ModelMeterCore"
         ),
         .executableTarget(
             name: "ModelMeterApp",
-            dependencies: ["ModelMeterCore"],
+            dependencies: [
+                "ModelMeterCore",
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
+            exclude: [
+                "Info.plist"
+            ],
             resources: [
                 .process("Resources")
             ]
@@ -24,6 +33,10 @@ let package = Package(
         .testTarget(
             name: "ModelMeterCoreTests",
             dependencies: ["ModelMeterCore"]
+        ),
+        .testTarget(
+            name: "ModelMeterAppTests",
+            dependencies: ["ModelMeterApp"]
         )
     ]
 )

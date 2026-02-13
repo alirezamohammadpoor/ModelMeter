@@ -1,42 +1,47 @@
 import SwiftUI
+import ModelMeterCore
 
 struct UsageMetricView: View {
+    let provider: UsageProvider
     let label: String
     let percentText: String
     let percentValue: Double?
     let detailText: String?
 
-    @Environment(\.colorScheme) private var colorScheme
+    private var percentTextColor: Color {
+        ProviderTheme.progressFill(provider, percent: percentValue)
+    }
 
-    private var statusColor: Color {
-        guard let percentValue else { return VercelColors.accents5(colorScheme) }
-        return VercelStatusColor.forUsagePercent(percentValue).color(colorScheme)
+    private var progressFillColor: Color {
+        ProviderTheme.progressFill(provider, percent: percentValue)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(percentText)
-                    .font(VercelTextStyles.metricValue())
-                    .foregroundStyle(statusColor)
+                    .font(ModelMeterTextStyles.metricValue())
+                    .foregroundStyle(percentTextColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 Spacer()
                 Text(label)
-                    .font(VercelTextStyles.label())
-                    .foregroundStyle(VercelColors.accents5(colorScheme))
+                    .font(ModelMeterTextStyles.label())
+                    .foregroundStyle(ProviderTheme.primaryText(provider))
             }
 
             UsageProgressBar(
                 progress: (percentValue ?? 0) / 100.0,
-                color: statusColor,
-                trackColor: VercelColors.accents2(colorScheme))
+                color: progressFillColor,
+                trackColor: ProviderTheme.progressTrack(provider))
 
             if let detailText {
                 Text(detailText)
-                    .font(VercelTextStyles.monoCaption())
-                    .foregroundStyle(VercelColors.accents4(colorScheme))
+                    .font(ModelMeterTextStyles.monoCaption())
+                    .foregroundStyle(ProviderTheme.secondaryText(provider))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, ModelMeterLayout.horizontalPadding)
+        .padding(.vertical, ModelMeterLayout.verticalPadding)
     }
 }

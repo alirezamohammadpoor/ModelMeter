@@ -25,7 +25,6 @@ TOKEN_URLS = [
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 SCOPES = "user:profile user:inference user:sessions:claude_code user:mcp_servers"
 REFRESH_BUFFER_MS = 5 * 60 * 1000
-CONFIG_PATH = os.path.expanduser("~/.modelmeter/config.json")
 
 
 def fail(message: str) -> None:
@@ -79,43 +78,6 @@ def read_credentials() -> Tuple[dict, str, Optional[str]]:
 
     fail("Credentials not found. Run `claude` to log in.")
     return {}, "missing", None
-
-
-def read_config() -> dict:
-    if not os.path.exists(CONFIG_PATH):
-        return {}
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except Exception:
-        return {}
-
-
-def cookie_header_from_config() -> Optional[str]:
-    cfg = read_config()
-    if not isinstance(cfg, dict):
-        return None
-    raw = cfg.get("claudeCookieHeader")
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()
-    return None
-
-
-def normalize_cookie_header(value: str) -> str:
-    trimmed = value.strip()
-    lower = trimmed.lower()
-    if lower.startswith("cookie:"):
-        return trimmed.split(":", 1)[1].strip()
-    return trimmed
-
-
-def session_key_from_cookie(cookie_header: str) -> Optional[str]:
-    raw = normalize_cookie_header(cookie_header)
-    parts = [part.strip() for part in raw.split(";") if part.strip()]
-    for part in parts:
-        if part.startswith("sessionKey="):
-            return part.split("=", 1)[1]
-    return None
 
 
 def write_credentials(payload: dict, source: str, path: Optional[str]) -> None:
@@ -172,7 +134,7 @@ def refresh_token(oauth: dict, creds: dict, source: str, path: Optional[str]) ->
     payload = None
     access = None
     for url in [u for u in TOKEN_URLS if u]:
-        status, body, _, err = request_json(
+        status, body, _, _ = request_json(
             url,
             "POST",
             {"Content-Type": "application/json"},
@@ -216,7 +178,7 @@ def fetch_usage(token: str) -> dict:
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "anthropic-beta": "oauth-2025-04-20",
-                "User-Agent": "MenuUsage",
+                "User-Agent": "ModelMeter",
             },
             None,
             timeout=10,
@@ -235,80 +197,50 @@ def fetch_usage(token: str) -> dict:
     fail(f"Usage request failed: {last_error or 'No response.'}")
 
 
-def request_web_json(url: str, cookie_header: str) -> dict:
-    headers = {
-        "Cookie": normalize_cookie_header(cookie_header),
-        "Accept": "application/json",
-        "User-Agent": "MenuUsage",
-    }
-    status, payload, _, err = request_json(url, "GET", headers, None, timeout=10)
-    if status < 200 or status >= 300:
-        if status == 0 and err:
-            fail(f"Claude web request failed: {err}")
-        fail(f"Claude web request failed (HTTP {status}).")
-    return payload
+def to_iso(ts):
+    if isinstance(ts, (int, float)):
+        return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+    return None
 
 
-def fetch_web_usage(cookie_header: str) -> dict:
-    session_key = session_key_from_cookie(cookie_header)
-    if not session_key:
-        fail("Claude cookie header missing sessionKey.")
-    organizations = request_web_json("https://claude.ai/api/organizations", cookie_header)
-    org_id = None
-    if isinstance(organizations, list):
-        for entry in organizations:
-            if isinstance(entry, dict) and isinstance(entry.get("uuid"), str):
-                org_id = entry.get("uuid")
-                break
-    if not org_id:
-        fail("No Claude organization found.")
-    return request_web_json(f"https://claude.ai/api/organizations/{org_id}/usage", cookie_header)
+def normalize_percent(value) -> float:
+    try:
+        numeric = float(value)
+    except Exception:
+        return 0.0
+    # Some APIs return utilization in 0..1, others already in 0..100.
+    return numeric * 100.0 if numeric <= 1.0 else numeric
 
 
 def main() -> None:
-    cookie_header = os.environ.get("CLAUDE_COOKIE_HEADER") or os.environ.get("CLAUDE_COOKIE")
-    if not cookie_header:
-        cookie_header = cookie_header_from_config()
+    creds, source, path = read_credentials()
+    oauth = creds.get("claudeAiOauth")
+    if not isinstance(oauth, dict):
+        fail("Claude OAuth credentials missing. Run `claude` to log in.")
 
-    data = None
-    try:
-        creds, source, path = read_credentials()
-        oauth = creds.get("claudeAiOauth")
-        if not isinstance(oauth, dict):
-            raise RuntimeError("Claude OAuth missing.")
+    access = oauth.get("accessToken")
+    if not isinstance(access, str) or not access.strip():
+        fail("Claude access token missing. Run `claude` to log in.")
 
-        access = oauth.get("accessToken")
-        if not isinstance(access, str) or not access.strip():
-            raise RuntimeError("Claude access token missing.")
-
-        if needs_refresh(oauth):
-            refreshed = refresh_token(oauth, creds, source, path)
-            if refreshed:
-                access = refreshed
-            else:
-                fail("Token expired. Run `claude` to re-authenticate.")
-
-        data = fetch_usage(access)
-    except SystemExit as exc:
-        if cookie_header:
-            data = fetch_web_usage(cookie_header)
+    if needs_refresh(oauth):
+        refreshed = refresh_token(oauth, creds, source, path)
+        if refreshed:
+            access = refreshed
         else:
-            raise exc
+            fail("Token expired. Run `claude` to re-authenticate.")
 
+    data = fetch_usage(access)
     five_hour = data.get("five_hour", {}) if isinstance(data.get("five_hour"), dict) else {}
     seven_day = data.get("seven_day", {}) if isinstance(data.get("seven_day"), dict) else {}
 
-    session = five_hour.get("utilization")
-    weekly = seven_day.get("utilization")
-
-    if not isinstance(session, (int, float)) or not isinstance(weekly, (int, float)):
-        fail("Missing usage percent values.")
+    session_percent = normalize_percent(five_hour.get("utilization", 0.0))
+    weekly_percent = normalize_percent(seven_day.get("utilization", 0.0))
 
     payload = {
-        "sessionPercent": float(session),
-        "weeklyPercent": float(weekly),
-        "sessionResetAt": five_hour.get("resets_at"),
-        "weeklyResetAt": seven_day.get("resets_at"),
+        "sessionPercent": session_percent,
+        "weeklyPercent": weekly_percent,
+        "sessionResetAt": to_iso(five_hour.get("resets_at")),
+        "weeklyResetAt": to_iso(seven_day.get("resets_at")),
         "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 

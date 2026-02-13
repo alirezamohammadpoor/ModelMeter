@@ -1,106 +1,117 @@
 import AppKit
+import ModelMeterCore
 
 enum StatusIconRenderer {
-    struct RenderedIcon {
-        let image: NSImage
-        let isTemplate: Bool
+    private static let claudeStatusIconSize = NSSize(width: 14, height: 14)
+    private static let codexStatusIconSize = NSSize(width: 16, height: 16)
+
+    struct RenderedStatusItem {
+        let image: NSImage?
+        let title: NSAttributedString
+        let symbolColor: NSColor
     }
 
-    enum BarState {
-        case normal
-        case warning
-        case critical
+    static func render(
+        provider: UsageProvider,
+        sessionPercent: Double?,
+        weeklyPercent: Double?
+    ) -> RenderedStatusItem {
+        let displayedPercent = sessionPercent ?? weeklyPercent ?? 0
+        let isCritical = displayedPercent >= Double(UsageThresholds.critical90)
 
-        static func from(percent: Double) -> BarState {
-            switch percent {
-            case 95...:
-                return .critical
-            case 60...:
-                return .warning
-            default:
-                return .normal
-            }
+        let text: String
+        if let sessionPercent {
+            text = String(format: "%.0f%%", sessionPercent)
+        } else {
+            text = "--"
         }
 
-        var color: NSColor {
-            switch self {
-            case .normal:
-                return NSColor.labelColor
-            case .warning:
-                return NSColor(calibratedRed: 0xF5 / 255, green: 0xA6 / 255, blue: 0x23 / 255, alpha: 1)
-            case .critical:
-                return NSColor(calibratedRed: 0xEE / 255, green: 0x00 / 255, blue: 0x00 / 255, alpha: 1)
-            }
+        let textColor = isCritical ? NSColor(hex: 0xBF4D43) : .white
+        let title = NSAttributedString(
+            string: text,
+            attributes: [
+                .foregroundColor: textColor,
+                .font: NSFont.systemFont(ofSize: 12, weight: .medium)
+            ])
+
+        let symbolName = provider == .claude ? "sparkles" : "circle.grid.2x2.fill"
+        let image = ProviderStatusLogo.image(for: provider)
+            ?? NSImage(systemSymbolName: symbolName, accessibilityDescription: provider.displayName)?
+                .withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
+        let targetSize = provider == .codex ? codexStatusIconSize : claudeStatusIconSize
+        let normalizedImage = image?.normalizedForStatusBar(size: targetSize)
+        let tintedImage = normalizedImage?.tinted(with: .white)
+        tintedImage?.isTemplate = false
+
+        return RenderedStatusItem(image: tintedImage, title: title, symbolColor: .white)
+    }
+}
+
+private enum ProviderStatusLogo {
+    static func image(for provider: UsageProvider) -> NSImage? {
+        switch provider {
+        case .claude: return claude
+        case .codex: return openAI
         }
     }
 
-    private static let trackColor = NSColor(calibratedRed: 0x1A / 255, green: 0x1A / 255, blue: 0x1A / 255, alpha: 1)
+    private static let claude = loadAny(named: "claude")
+        ?? loadAny(named: "Claude_Logo_3")
+    private static let openAI = loadAny(named: "OpenAI-white-monoblossom")
+        ?? loadAny(named: "OpenAI-black-monoblossom")
 
-    static func render(sessionPercent: Double, weeklyPercent: Double) -> RenderedIcon {
-        let size = NSSize(width: 18, height: 18)
-        let image = NSImage(size: size)
-        image.isTemplate = false
+    private static func loadAny(named resource: String) -> NSImage? {
+        for ext in ["png", "svg"] {
+            let candidates: [URL?] = [
+                Bundle.module.url(forResource: resource, withExtension: ext, subdirectory: "Logos"),
+                Bundle.module.url(forResource: resource, withExtension: ext)
+            ]
+            for url in candidates {
+                if let url, let image = NSImage(contentsOf: url) {
+                    image.isTemplate = true
+                    return image
+                }
+            }
+        }
+        return nil
+    }
+}
 
-        let barWidth: CGFloat = 14
-        let barHeight: CGFloat = 4
-        let gap: CGFloat = 4
-        let cornerRadius: CGFloat = 2
-        let totalHeight = barHeight + gap + barHeight // 12pt
-        let originX = (size.width - barWidth) / 2
-        let originY = (size.height - totalHeight) / 2
+private extension NSColor {
+    convenience init(hex: UInt32, alpha: CGFloat = 1.0) {
+        let red = CGFloat((hex >> 16) & 0xFF) / 255.0
+        let green = CGFloat((hex >> 8) & 0xFF) / 255.0
+        let blue = CGFloat(hex & 0xFF) / 255.0
+        self.init(srgbRed: red, green: green, blue: blue, alpha: alpha)
+    }
+}
 
-        let sessionState = BarState.from(percent: sessionPercent)
-        let weeklyState = BarState.from(percent: weeklyPercent)
-        let bothNormal = sessionState == .normal && weeklyState == .normal
-
-        image.lockFocus()
-        defer { image.unlockFocus() }
-
-        // Top bar: session (y is flipped in NSImage — top bar has higher y)
-        let topBarY = originY + barHeight + gap
-        drawBar(
-            x: originX, y: topBarY,
-            width: barWidth, height: barHeight,
-            cornerRadius: cornerRadius,
-            fillPercent: sessionPercent,
-            state: sessionState)
-
-        // Bottom bar: weekly
-        let bottomBarY = originY
-        drawBar(
-            x: originX, y: bottomBarY,
-            width: barWidth, height: barHeight,
-            cornerRadius: cornerRadius,
-            fillPercent: weeklyPercent,
-            state: weeklyState)
-
-        image.isTemplate = bothNormal
-        return RenderedIcon(image: image, isTemplate: bothNormal)
+private extension NSImage {
+    func normalizedForStatusBar(size: NSSize) -> NSImage {
+        let output = NSImage(size: size)
+        output.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        let source = NSRect(origin: .zero, size: self.size)
+        let ratio = min(size.width / self.size.width, size.height / self.size.height)
+        let drawSize = NSSize(width: self.size.width * ratio, height: self.size.height * ratio)
+        let drawRect = NSRect(
+            x: (size.width - drawSize.width) / 2,
+            y: (size.height - drawSize.height) / 2,
+            width: drawSize.width,
+            height: drawSize.height)
+        draw(in: drawRect, from: source, operation: .sourceOver, fraction: 1.0)
+        output.unlockFocus()
+        output.isTemplate = self.isTemplate
+        return output
     }
 
-    private static func drawBar(
-        x: CGFloat, y: CGFloat,
-        width: CGFloat, height: CGFloat,
-        cornerRadius: CGFloat,
-        fillPercent: Double,
-        state: BarState
-    ) {
-        let trackRect = NSRect(x: x, y: y, width: width, height: height)
-        let trackPath = NSBezierPath(roundedRect: trackRect, xRadius: cornerRadius, yRadius: cornerRadius)
-        trackColor.setFill()
-        trackPath.fill()
-
-        let fillFraction = max(0, min(1, fillPercent / 100.0))
-        guard fillFraction > 0 else { return }
-
-        let fillWidth = width * fillFraction
-        let fillRect = NSRect(x: x, y: y, width: fillWidth, height: height)
-
-        NSGraphicsContext.current?.saveGraphicsState()
-        trackPath.addClip()
-        let fillPath = NSBezierPath(roundedRect: fillRect, xRadius: cornerRadius, yRadius: cornerRadius)
-        state.color.setFill()
-        fillPath.fill()
-        NSGraphicsContext.current?.restoreGraphicsState()
+    func tinted(with color: NSColor) -> NSImage {
+        let output = copy() as? NSImage ?? NSImage(size: size)
+        output.lockFocus()
+        color.set()
+        let rect = NSRect(origin: .zero, size: output.size)
+        rect.fill(using: .sourceAtop)
+        output.unlockFocus()
+        return output
     }
 }

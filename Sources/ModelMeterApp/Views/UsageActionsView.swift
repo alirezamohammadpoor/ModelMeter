@@ -1,11 +1,16 @@
 import SwiftUI
+import ModelMeterCore
 
 struct UsageActionsView: View {
+    let provider: UsageProvider
     let onRefresh: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
     @State private var refreshHover = false
     @State private var settingsHover = false
+
+    private var actionForeground: Color {
+        ProviderTheme.secondaryText(provider)
+    }
 
     var body: some View {
         HStack {
@@ -14,13 +19,14 @@ struct UsageActionsView: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 12, weight: .light))
                     Text("Refresh")
-                        .font(VercelTextStyles.secondary())
+                        .font(ModelMeterTextStyles.secondary())
                 }
-                .foregroundStyle(refreshHover ? VercelColors.foreground(colorScheme) : VercelColors.accents5(colorScheme))
+                .foregroundStyle(actionForeground)
                 .padding(.vertical, 6)
                 .padding(.horizontal, 6)
-                .background(refreshHover ? VercelColors.accents1(colorScheme) : Color.clear)
+                .background(refreshHover ? ProviderTheme.hoverContainer(provider) : ProviderTheme.controlBackground(provider))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                .animation(ModelMeterMotion.hover, value: refreshHover)
             }
             .buttonStyle(.plain)
             .onHover { hover in
@@ -34,13 +40,14 @@ struct UsageActionsView: View {
                     Image(systemName: "gearshape")
                         .font(.system(size: 12, weight: .light))
                     Text("Settings")
-                        .font(VercelTextStyles.secondary())
+                        .font(ModelMeterTextStyles.secondary())
                 }
-                .foregroundStyle(settingsHover ? VercelColors.foreground(colorScheme) : VercelColors.accents5(colorScheme))
+                .foregroundStyle(actionForeground)
                 .padding(.vertical, 6)
                 .padding(.horizontal, 6)
-                .background(settingsHover ? VercelColors.accents1(colorScheme) : Color.clear)
+                .background(settingsHover ? ProviderTheme.hoverContainer(provider) : ProviderTheme.controlBackground(provider))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                .animation(ModelMeterMotion.hover, value: settingsHover)
             }
             .buttonStyle(.plain)
             .onHover { hover in

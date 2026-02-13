@@ -1,13 +1,14 @@
 import SwiftUI
+import ModelMeterCore
 
 struct SettingsSectionHeader: View {
     let title: String
-    @Environment(\.colorScheme) private var colorScheme
+    let provider: UsageProvider
 
     var body: some View {
         Text(title.uppercased())
-            .font(VercelTextStyles.sectionHeader())
-            .foregroundStyle(VercelColors.accents5(colorScheme))
+            .font(ModelMeterTextStyles.sectionHeader())
+            .foregroundStyle(ProviderTheme.secondaryText(provider))
             .tracking(0.5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
@@ -16,33 +17,32 @@ struct SettingsSectionHeader: View {
     }
 }
 
-struct VercelToggleRow: View {
+struct ModelMeterToggleRow: View {
     let title: String
+    let provider: UsageProvider
     @Binding var isOn: Bool
-
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack {
             Text(title)
-                .font(VercelTextStyles.body())
-                .foregroundStyle(VercelColors.foreground(colorScheme))
+                .font(ModelMeterTextStyles.body())
+                .foregroundStyle(ProviderTheme.primaryText(provider))
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(VercelToggleStyle())
+                .toggleStyle(ModelMeterToggleStyle(provider: provider))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
     }
 }
 
-struct VercelToggleStyle: ToggleStyle {
-    @Environment(\.colorScheme) private var colorScheme
+struct ModelMeterToggleStyle: ToggleStyle {
+    let provider: UsageProvider
 
     func makeBody(configuration: Configuration) -> some View {
-        let trackColor = configuration.isOn ? VercelColors.foreground(colorScheme) : VercelColors.accents2(colorScheme)
-        let knobColor = VercelColors.background100(colorScheme)
+        let trackColor = configuration.isOn ? ProviderTheme.accent(provider) : ProviderTheme.progressTrack(provider)
+        let knobColor = Color.black.opacity(provider == .codex ? 1 : 0.9)
 
         return Button(action: {
             configuration.isOn.toggle()
@@ -55,7 +55,7 @@ struct VercelToggleStyle: ToggleStyle {
                         .fill(knobColor)
                         .padding(2)
                         .offset(x: configuration.isOn ? 9 : -9)
-                        .animation(.easeOut(duration: 0.15), value: configuration.isOn)
+                        .animation(ModelMeterMotion.hover, value: configuration.isOn)
                 )
         }
         .buttonStyle(.plain)
@@ -63,8 +63,8 @@ struct VercelToggleStyle: ToggleStyle {
 }
 
 struct PollIntervalSelector: View {
+    let provider: UsageProvider
     @Binding var selection: PollIntervalOption
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 6) {
@@ -72,83 +72,61 @@ struct PollIntervalSelector: View {
                 Button(option.label) {
                     selection = option
                 }
-                .font(VercelTextStyles.body())
-                .foregroundStyle(selection == option ? VercelColors.background100(colorScheme) : VercelColors.foreground(colorScheme))
+                .font(ModelMeterTextStyles.body())
+                .foregroundStyle(selection == option ? Color.black : ProviderTheme.primaryText(provider))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(selection == option ? VercelColors.foreground(colorScheme) : Color.clear)
+                .background(selection == option ? ProviderTheme.accent(provider) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
         }
         .padding(4)
-        .background(VercelColors.accents1(colorScheme))
+        .background(ProviderTheme.subtleContainer(provider))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(VercelColors.border(colorScheme), lineWidth: 1)
+                .stroke(ProviderTheme.border(provider), lineWidth: 1)
         )
     }
 }
 
-struct VercelFieldBox: View {
+struct ModelMeterFieldBox: View {
     let text: String
-    @Environment(\.colorScheme) private var colorScheme
+    let provider: UsageProvider
 
     var body: some View {
         Text(text)
-            .font(VercelTextStyles.monoData())
-            .foregroundStyle(VercelColors.foreground(colorScheme))
+            .font(ModelMeterTextStyles.monoData())
+            .foregroundStyle(ProviderTheme.primaryText(provider))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(VercelColors.accents1(colorScheme))
+            .background(ProviderTheme.subtleContainer(provider))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(VercelColors.border(colorScheme), lineWidth: 1)
+                    .stroke(ProviderTheme.border(provider), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 
-struct VercelTextArea: View {
-    let placeholder: String
-    @Binding var text: String
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        TextField(placeholder, text: $text, axis: .vertical)
-            .font(VercelTextStyles.monoCaption())
-            .foregroundStyle(VercelColors.foreground(colorScheme))
-            .textFieldStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(VercelColors.accents1(colorScheme))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(VercelColors.border(colorScheme), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-}
-
-struct VercelSecondaryButton: View {
+struct ModelMeterSecondaryButton: View {
     let title: String
+    let provider: UsageProvider
     let action: () -> Void
-
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button(title) {
             action()
         }
         .buttonStyle(.plain)
-        .font(VercelTextStyles.body())
-        .foregroundStyle(VercelColors.foreground(colorScheme))
+        .font(ModelMeterTextStyles.body())
+        .foregroundStyle(ProviderTheme.secondaryText(provider))
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(VercelColors.border(colorScheme), lineWidth: 1)
+                .stroke(ProviderTheme.border(provider), lineWidth: 1)
         )
     }
 }

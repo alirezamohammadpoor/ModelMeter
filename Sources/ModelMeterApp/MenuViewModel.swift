@@ -8,8 +8,8 @@ final class MenuViewModel {
     let store: UsageStore
     let settings: SettingsStore
     private let notifications: NotificationManager
-    private var sessionThresholdGate = ThresholdGate()
-    private var weeklyThresholdGate = ThresholdGate()
+    private var sessionThresholdGates: [UsageProvider: ThresholdGate] = [:]
+    private var weeklyThresholdGates: [UsageProvider: ThresholdGate] = [:]
 
     init(store: UsageStore, settings: SettingsStore, notifications: NotificationManager) {
         self.store = store
@@ -17,6 +17,10 @@ final class MenuViewModel {
         self.notifications = notifications
         self.observeStoreChanges()
         self.observeSettingsChanges()
+    }
+
+    var selectedProvider: UsageProvider {
+        settings.selectedProvider
     }
 
     private var currentSnapshot: UsageSnapshot? {
@@ -41,6 +45,11 @@ final class MenuViewModel {
             return String(format: "%.0f%%", percent)
         }
         return "--"
+    }
+
+    var displayPercentText: String {
+        guard let percent = currentSnapshot?.sessionUsedPercent else { return "--" }
+        return String(format: "%.0f%%", percent)
     }
 
     var sessionProgress: Double? {
@@ -114,11 +123,11 @@ final class MenuViewModel {
     }
 
     var errorHint: String? {
-        guard currentError != nil else { return nil }
-        if isAuthError {
+        guard currentError != nil, isAuthError else { return nil }
+        if store.selectedProvider == .claude {
             return "Run `claude` in Terminal to re-authenticate."
         }
-        return nil
+        return "Run `codex` in Terminal to re-authenticate."
     }
 
     var hasErrorState: Bool {
@@ -153,22 +162,27 @@ final class MenuViewModel {
     }
 
     private func handleStoreChange() {
+        let provider = store.selectedProvider
         guard let snapshot = currentSnapshot else { return }
 
         let sessionPercent = snapshot.sessionUsedPercent
         let weeklyPercent = snapshot.weeklyUsedPercent
 
+        var sessionGate = sessionThresholdGates[provider] ?? ThresholdGate()
         let sessionThreshold = sessionPercent.map { percent in
-            sessionThresholdGate.nextThreshold(
+            sessionGate.nextThreshold(
                 usedPercent: Int(percent.rounded(.down)),
                 resetAt: snapshot.sessionResetAt)
         } ?? nil
+        sessionThresholdGates[provider] = sessionGate
 
+        var weeklyGate = weeklyThresholdGates[provider] ?? ThresholdGate()
         let weeklyThreshold = weeklyPercent.map { percent in
-            weeklyThresholdGate.nextThreshold(
+            weeklyGate.nextThreshold(
                 usedPercent: Int(percent.rounded(.down)),
                 resetAt: snapshot.weeklyResetAt)
         } ?? nil
+        weeklyThresholdGates[provider] = weeklyGate
 
         let chosenThreshold = max(sessionThreshold ?? 0, weeklyThreshold ?? 0)
         guard chosenThreshold > 0 else { return }
@@ -177,7 +191,7 @@ final class MenuViewModel {
         let isWeekly = (weeklyThreshold ?? 0) > (sessionThreshold ?? 0)
         let scope = isWeekly ? "Weekly" : "Session"
 
-        let providerTitle = settings.selectedProvider == .claude ? "Claude Code" : "Codex"
+        let providerTitle = provider == .claude ? "Claude Code" : "Codex"
         let body = notificationBody(scope: scope, threshold: chosenThreshold)
 
         notifications.postThresholdAlert(title: providerTitle, body: body)
@@ -185,12 +199,12 @@ final class MenuViewModel {
 
     private func notificationBody(scope: String, threshold: Int) -> String {
         switch threshold {
-        case 60:
+        case UsageThresholds.warning60:
             return "\(scope) usage at 60%"
-        case 80:
+        case UsageThresholds.warning80:
             return "\(scope) usage at 80%. Consider pacing."
-        case 95:
-            return "\(scope) limit approaching. 5% remaining."
+        case UsageThresholds.critical90:
+            return "\(scope) limit approaching. 10% remaining."
         default:
             return "\(scope) usage at \(threshold)%"
         }
@@ -209,10 +223,6 @@ final class MenuViewModel {
                 self.observeSettingsChanges()
             }
         }
-    }
-
-    var selectedProviderName: String {
-        settings.selectedProvider.displayName
     }
 
     func isSelected(_ provider: UsageProvider) -> Bool {

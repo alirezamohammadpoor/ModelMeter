@@ -18,10 +18,9 @@ public struct ThresholdGate: Sendable {
         if let lastPercent, lastPercent - usedPercent >= 50 {
             firedThresholds.removeAll()
         }
-        lastPercent = usedPercent
+        self.lastPercent = usedPercent
 
-        let thresholds = [60, 80, 95]
-        for threshold in thresholds where usedPercent >= threshold {
+        for threshold in UsageThresholds.all where usedPercent >= threshold {
             if firedThresholds.contains(threshold) { continue }
             firedThresholds.insert(threshold)
             return threshold

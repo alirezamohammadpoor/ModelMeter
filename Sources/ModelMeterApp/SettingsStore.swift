@@ -43,7 +43,7 @@ final class SettingsStore {
         didSet { persist() }
     }
 
-    var notifyAt95: Bool {
+    var notifyAt90: Bool {
         didSet { persist() }
     }
 
@@ -64,11 +64,11 @@ final class SettingsStore {
         self.pollInterval = PollIntervalOption(rawValue: rawInterval ?? "") ?? .thirtySeconds
         self.notifyAt60 = defaults.object(forKey: "notifyAt60") as? Bool ?? true
         self.notifyAt80 = defaults.object(forKey: "notifyAt80") as? Bool ?? true
-        let notifyAt95 = defaults.object(forKey: "notifyAt95") as? Bool
-            ?? defaults.object(forKey: "notifyAt90") as? Bool
+        let notifyAt90 = defaults.object(forKey: "notifyAt90") as? Bool
+            ?? defaults.object(forKey: "notifyAt95") as? Bool
             ?? defaults.object(forKey: "notifyAt100") as? Bool
             ?? true
-        self.notifyAt95 = notifyAt95
+        self.notifyAt90 = notifyAt90
         self.launchAtLogin = defaults.object(forKey: "launchAtLogin") as? Bool ?? false
         let rawProvider = defaults.string(forKey: "selectedProvider")
         self.selectedProvider = UsageProvider(rawValue: rawProvider ?? "") ?? .claude
@@ -76,9 +76,9 @@ final class SettingsStore {
 
     func isThresholdEnabled(_ threshold: Int) -> Bool {
         switch threshold {
-        case 60: return notifyAt60
-        case 80: return notifyAt80
-        case 95: return notifyAt95
+        case UsageThresholds.warning60: return notifyAt60
+        case UsageThresholds.warning80: return notifyAt80
+        case UsageThresholds.critical90: return notifyAt90
         default: return false
         }
     }
@@ -87,7 +87,7 @@ final class SettingsStore {
         defaults.set(pollInterval.rawValue, forKey: "pollInterval")
         defaults.set(notifyAt60, forKey: "notifyAt60")
         defaults.set(notifyAt80, forKey: "notifyAt80")
-        defaults.set(notifyAt95, forKey: "notifyAt95")
+        defaults.set(notifyAt90, forKey: "notifyAt90")
         defaults.set(launchAtLogin, forKey: "launchAtLogin")
         defaults.set(selectedProvider.rawValue, forKey: "selectedProvider")
     }

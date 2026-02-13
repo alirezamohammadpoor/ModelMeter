@@ -9,7 +9,6 @@ public struct ModelMeterConfig: Codable, Sendable {
     public var providerArgs: [String]?
     public var claudeCommand: String?
     public var codexCommand: String?
-    public var claudeCookieHeader: String?
 
     public init(
         usageFilePath: String? = nil,
@@ -19,8 +18,7 @@ public struct ModelMeterConfig: Codable, Sendable {
         providerCommand: String? = nil,
         providerArgs: [String]? = nil,
         claudeCommand: String? = nil,
-        codexCommand: String? = nil,
-        claudeCookieHeader: String? = nil
+        codexCommand: String? = nil
     ) {
         self.usageFilePath = usageFilePath
         self.sessionLimitPercent = sessionLimitPercent
@@ -30,11 +28,10 @@ public struct ModelMeterConfig: Codable, Sendable {
         self.providerArgs = providerArgs
         self.claudeCommand = claudeCommand
         self.codexCommand = codexCommand
-        self.claudeCookieHeader = claudeCookieHeader
     }
 }
 
-public struct ConfigStore {
+public struct ConfigStore: @unchecked Sendable {
     public let fileURL: URL
     private let fileManager: FileManager
 
@@ -66,6 +63,19 @@ public struct ConfigStore {
         homeDirectory
             .appendingPathComponent(".modelmeter", isDirectory: true)
             .appendingPathComponent("config.json")
+    }
+
+    public func migrateDeprecatedFields() throws {
+        guard fileManager.fileExists(atPath: fileURL.path) else { return }
+        let data = try Data(contentsOf: fileURL)
+        guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+        guard json["claudeCookieHeader"] != nil else { return }
+        json.removeValue(forKey: "claudeCookieHeader")
+
+        let migratedData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try migratedData.write(to: fileURL, options: [.atomic])
+        try applySecurePermissionsIfNeeded()
     }
 
     private func applySecurePermissionsIfNeeded() throws {

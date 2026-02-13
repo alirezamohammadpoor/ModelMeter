@@ -9,8 +9,8 @@ final class ThresholdGateTests: XCTestCase {
         XCTAssertEqual(gate.nextThreshold(usedPercent: 61, resetAt: now), 60)
         XCTAssertNil(gate.nextThreshold(usedPercent: 62, resetAt: now))
         XCTAssertEqual(gate.nextThreshold(usedPercent: 81, resetAt: now), 80)
-        XCTAssertNil(gate.nextThreshold(usedPercent: 91, resetAt: now))
-        XCTAssertEqual(gate.nextThreshold(usedPercent: 96, resetAt: now), 95)
+        XCTAssertEqual(gate.nextThreshold(usedPercent: 91, resetAt: now), 90)
+        XCTAssertNil(gate.nextThreshold(usedPercent: 92, resetAt: now))
         XCTAssertNil(gate.nextThreshold(usedPercent: 100, resetAt: now))
     }
 
