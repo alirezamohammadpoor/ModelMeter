@@ -6,11 +6,11 @@
     <description>Latest releases of ModelMeter</description>
     <language>en</language>
     <item>
-      <title>Version 1.0.3</title>
-      <sparkle:version>1.0.3</sparkle:version>
-      <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
-      <pubDate>Sat, 14 Feb 2026 13:56:59 +0000</pubDate>
-      <enclosure url="https://github.com/alirezamohammadpoor/ModelMeter/releases/download/v1.0.3/ModelMeter-v1.0.3-macOS.dmg" sparkle:version="1.0.3" sparkle:shortVersionString="1.0.3" length="4227704" type="application/octet-stream" sparkle:edSignature="/xAcyn4Rjr+tWVjRd0bANELSikkfome9iJOMRS8DpowCLcg43wB07HGDJO/M6xC2OJhaDhZzf0ywHJqIdMIVCQ==" />
+      <title>Version 1.0.4</title>
+      <sparkle:version>1.0.4</sparkle:version>
+      <sparkle:shortVersionString>1.0.4</sparkle:shortVersionString>
+      <pubDate>Sat, 14 Feb 2026 14:09:14 +0000</pubDate>
+      <enclosure url="https://github.com/alirezamohammadpoor/ModelMeter/releases/download/v1.0.4/ModelMeter-v1.0.4-macOS.dmg" sparkle:version="1.0.4" sparkle:shortVersionString="1.0.4" length="4227689" type="application/octet-stream" sparkle:edSignature="7gLhumoCalfQpjKJhPcSSTlTE3INwvUPeHzFahEeqSFRSZpfeiK5daF+pYPHPLhmvMelb7iaeia6mcIdSaEMDg==" />
     </item>
   </channel>
 </rss>
