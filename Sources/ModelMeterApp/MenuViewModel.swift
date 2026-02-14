@@ -1,6 +1,5 @@
 import Foundation
 import ModelMeterCore
-import Observation
 
 @MainActor
 @Observable
@@ -149,16 +148,14 @@ final class MenuViewModel {
     }
 
     private func observeStoreChanges() {
-        withObservationTracking {
-            _ = store.snapshots
-            _ = store.errors
-            _ = store.selectedProvider
+        observeChanges {
+            _ = self.store.snapshots
+            _ = self.store.errors
+            _ = self.store.selectedProvider
         } onChange: { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                self.handleStoreChange()
-                self.observeStoreChanges()
-            }
+            guard let self else { return }
+            self.handleStoreChange()
+            self.observeStoreChanges()
         }
     }
 
@@ -212,17 +209,15 @@ final class MenuViewModel {
     }
 
     private func observeSettingsChanges() {
-        withObservationTracking {
-            _ = settings.pollInterval
-            _ = settings.selectedProvider
+        observeChanges {
+            _ = self.settings.pollInterval
+            _ = self.settings.selectedProvider
         } onChange: { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                self.store.updatePollInterval(self.settings.pollInterval.seconds)
-                self.store.updateSelectedProvider(self.settings.selectedProvider)
-                self.refreshNow()
-                self.observeSettingsChanges()
-            }
+            guard let self else { return }
+            self.store.updatePollInterval(self.settings.pollInterval.seconds)
+            self.store.updateSelectedProvider(self.settings.selectedProvider)
+            self.refreshNow()
+            self.observeSettingsChanges()
         }
     }
 

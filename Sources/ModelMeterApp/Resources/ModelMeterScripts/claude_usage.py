@@ -13,15 +13,8 @@ CRED_PATHS = [
     os.path.expanduser("~/.claude/.credentials.json"),
     os.path.expanduser("~/.config/claude/.credentials.json"),
 ]
-USAGE_URLS = [
-    os.environ.get("CLAUDE_USAGE_URL", "").strip(),
-    "https://claude.ai/api/oauth/usage",
-    "https://api.anthropic.com/api/oauth/usage",
-]
-TOKEN_URLS = [
-    os.environ.get("CLAUDE_TOKEN_URL", "").strip(),
-    "https://claude.ai/api/oauth/token",
-]
+USAGE_URL = os.environ.get("CLAUDE_USAGE_URL", "").strip() or "https://api.anthropic.com/api/oauth/usage"
+TOKEN_URL = os.environ.get("CLAUDE_TOKEN_URL", "").strip() or "https://platform.claude.com/v1/oauth/token"
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 SCOPES = "user:profile user:inference user:sessions:claude_code user:mcp_servers"
 REFRESH_BUFFER_MS = 5 * 60 * 1000
@@ -30,6 +23,19 @@ REFRESH_BUFFER_MS = 5 * 60 * 1000
 def fail(message: str) -> None:
     print(message, file=sys.stderr)
     raise SystemExit(1)
+
+
+def try_decode_hex(raw: str) -> str:
+    """Decode hex-encoded keychain output (macOS edge case)."""
+    cleaned = raw.strip()
+    if not cleaned:
+        return cleaned
+    if all(c in "0123456789abcdefABCDEF" for c in cleaned) and len(cleaned) % 2 == 0:
+        try:
+            return bytes.fromhex(cleaned).decode("utf-8")
+        except Exception:
+            pass
+    return cleaned
 
 
 def keychain_read() -> Optional[dict]:
@@ -43,6 +49,7 @@ def keychain_read() -> Optional[dict]:
         if result.returncode != 0:
             return None
         raw = result.stdout.strip()
+        raw = try_decode_hex(raw)
         if not raw:
             return None
         return json.loads(raw)
@@ -53,7 +60,8 @@ def keychain_read() -> Optional[dict]:
 def keychain_write(payload: dict) -> None:
     try:
         subprocess.run(
-            ["security", "add-generic-password", "-s", "Claude Code-credentials", "-U", "-w", json.dumps(payload)],
+            ["security", "add-generic-password", "-s", "Claude Code-credentials", "-U", "-w",
+             json.dumps(payload, separators=(",", ":"))],
             check=False,
             capture_output=True,
             text=True,
@@ -88,7 +96,7 @@ def write_credentials(payload: dict, source: str, path: Optional[str]) -> None:
         return
     try:
         with open(path, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
+            json.dump(payload, handle, separators=(",", ":"))
     except Exception:
         pass
 
@@ -131,70 +139,66 @@ def refresh_token(oauth: dict, creds: dict, source: str, path: Optional[str]) ->
     if not isinstance(refresh, str) or not refresh.strip():
         return None
 
-    payload = None
-    access = None
-    for url in [u for u in TOKEN_URLS if u]:
-        status, body, _, _ = request_json(
-            url,
-            "POST",
-            {"Content-Type": "application/json"},
-            {
-                "grant_type": "refresh_token",
-                "refresh_token": refresh,
-                "client_id": CLIENT_ID,
-                "scope": SCOPES,
-            },
-            timeout=15,
-        )
-        if status < 200 or status >= 300:
-            continue
-        access = body.get("access_token")
-        if isinstance(access, str) and access.strip():
-            payload = body
-            break
-
-    if payload is None or access is None:
+    status, body, _, _ = request_json(
+        TOKEN_URL,
+        "POST",
+        {"Content-Type": "application/json"},
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh,
+            "client_id": CLIENT_ID,
+            "scope": SCOPES,
+        },
+        timeout=15,
+    )
+    if status < 200 or status >= 300:
+        return None
+    access = body.get("access_token")
+    if not isinstance(access, str) or not access.strip():
         return None
 
     oauth["accessToken"] = access
-    if isinstance(payload.get("refresh_token"), str):
-        oauth["refreshToken"] = payload.get("refresh_token")
-    if isinstance(payload.get("expires_in"), (int, float)):
-        oauth["expiresAt"] = int(time.time() * 1000) + int(payload.get("expires_in")) * 1000
+    if isinstance(body.get("refresh_token"), str):
+        oauth["refreshToken"] = body.get("refresh_token")
+    if isinstance(body.get("expires_in"), (int, float)):
+        oauth["expiresAt"] = int(time.time() * 1000) + int(body.get("expires_in")) * 1000
 
     creds["claudeAiOauth"] = oauth
     write_credentials(creds, source, path)
     return access
 
 
-def fetch_usage(token: str) -> dict:
-    last_error = None
-    for url in [u for u in USAGE_URLS if u]:
-        status, payload, _, err = request_json(
-            url,
-            "GET",
-            {
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "anthropic-beta": "oauth-2025-04-20",
-                "User-Agent": "ModelMeter",
-            },
-            None,
-            timeout=10,
-        )
-        if status < 200 or status >= 300:
-            if status == 0 and err:
-                last_error = f"Request failed: {err}"
-            else:
-                last_error = f"HTTP {status} from {url}"
-            continue
-        five_hour = payload.get("five_hour", {}) if isinstance(payload.get("five_hour"), dict) else {}
-        seven_day = payload.get("seven_day", {}) if isinstance(payload.get("seven_day"), dict) else {}
-        if isinstance(five_hour.get("utilization"), (int, float)) and isinstance(seven_day.get("utilization"), (int, float)):
-            return payload
-        last_error = f"Missing usage fields from {url}"
-    fail(f"Usage request failed: {last_error or 'No response.'}")
+def fetch_usage(token: str) -> Tuple[int, dict]:
+    status, payload, _, err = request_json(
+        USAGE_URL,
+        "GET",
+        {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "anthropic-beta": "oauth-2025-04-20",
+            "User-Agent": "ModelMeter",
+        },
+        None,
+        timeout=10,
+    )
+    return status, payload
+
+
+def fetch_usage_with_retry(
+    token: str, oauth: dict, creds: dict, source: str, path: Optional[str]
+) -> Tuple[dict, str]:
+    status, payload = fetch_usage(token)
+    if status in (401, 403):
+        print(f"Got HTTP {status}, attempting token refresh...", file=sys.stderr)
+        refreshed = refresh_token(oauth, creds, source, path)
+        if refreshed:
+            status, payload = fetch_usage(refreshed)
+            if 200 <= status < 300:
+                return payload, refreshed
+    if 200 <= status < 300:
+        return payload, token
+    fail(f"Usage request failed: HTTP {status} from {USAGE_URL}")
 
 
 def to_iso(ts):
@@ -229,7 +233,7 @@ def main() -> None:
         else:
             fail("Token expired. Run `claude` to re-authenticate.")
 
-    data = fetch_usage(access)
+    data, access = fetch_usage_with_retry(access, oauth, creds, source, path)
     five_hour = data.get("five_hour", {}) if isinstance(data.get("five_hour"), dict) else {}
     seven_day = data.get("seven_day", {}) if isinstance(data.get("seven_day"), dict) else {}
 

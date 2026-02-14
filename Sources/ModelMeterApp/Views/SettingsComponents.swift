@@ -58,16 +58,18 @@ struct ModelMeterToggleStyle: ToggleStyle {
     }
 }
 
-struct PollIntervalSelector: View {
-    @Binding var selection: PollIntervalOption
-    @State private var hovered: PollIntervalOption?
+struct SettingsSegmentedControl<T: Hashable>: View {
+    @Binding var selection: T
+    let options: [T]
+    let label: (T) -> String
+    @State private var hovered: T?
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(PollIntervalOption.allCases) { option in
+            ForEach(options, id: \.self) { option in
                 let isActive = selection == option
                 let isHovered = hovered == option && !isActive
-                Button(option.label) {
+                Button(label(option)) {
                     selection = option
                 }
                 .font(ModelMeterTextStyles.body())
@@ -83,6 +85,18 @@ struct PollIntervalSelector: View {
     }
 }
 
+struct PollIntervalSelector: View {
+    @Binding var selection: PollIntervalOption
+
+    var body: some View {
+        SettingsSegmentedControl(
+            selection: $selection,
+            options: PollIntervalOption.allCases,
+            label: \.label
+        )
+    }
+}
+
 struct ModelMeterFieldBox: View {
     let text: String
 
@@ -94,11 +108,7 @@ struct ModelMeterFieldBox: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(SettingsTheme.fieldBackground)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(SettingsTheme.border, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .borderedRounded(SettingsTheme.border)
     }
 }
 
@@ -117,11 +127,7 @@ struct ModelMeterSecondaryButton: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(provider == nil ? SettingsTheme.buttonBackground : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(borderColor, lineWidth: 1)
-        )
+        .borderedRounded(borderColor)
     }
 
     private var foregroundColor: Color {
@@ -141,25 +147,12 @@ struct ModelMeterSecondaryButton: View {
 
 struct SettingsProviderPicker: View {
     @Binding var selection: UsageProvider
-    @State private var hovered: UsageProvider?
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(UsageProvider.allCases, id: \.self) { option in
-                let isActive = selection == option
-                let isHovered = hovered == option && !isActive
-                Button(option == .claude ? "Claude" : "OpenAI") {
-                    selection = option
-                }
-                .font(ModelMeterTextStyles.body())
-                .foregroundStyle(isActive ? SettingsTheme.segmentedActiveText : SettingsTheme.segmentedInactive)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isActive ? SettingsTheme.segmentedActive : isHovered ? SettingsTheme.segmentedActive.opacity(0.5) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .onHover { hovering in hovered = hovering ? option : nil }
-            }
-        }
-        .padding(4)
+        SettingsSegmentedControl(
+            selection: $selection,
+            options: UsageProvider.allCases,
+            label: { $0 == .claude ? "Claude" : "OpenAI" }
+        )
     }
 }

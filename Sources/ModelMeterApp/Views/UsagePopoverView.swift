@@ -44,11 +44,7 @@ struct UsagePopoverView: View {
             }
         }
         .background(.regularMaterial)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(ProviderTheme.border(provider), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .borderedRounded(ProviderTheme.border(provider), radius: 10)
         .frame(width: ModelMeterLayout.popoverWidth)
         .frame(maxHeight: 380)
         .animation(ModelMeterMotion.themeSwitch, value: provider)
@@ -165,11 +161,7 @@ private struct ProviderSegmentedToggle: View {
         }
         .padding(3)
         .background(ProviderTheme.segmentedContainer(provider))
-        .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .stroke(ProviderTheme.segmentedBorder(provider), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .borderedRounded(ProviderTheme.segmentedBorder(provider), radius: 7)
     }
 
     private func providerButton(
@@ -221,32 +213,3 @@ private struct ProviderLogo: View {
     }
 }
 
-private enum ProviderLogoAssets {
-    static func image(for provider: UsageProvider) -> NSImage? {
-        switch provider {
-        case .claude: return claude
-        case .codex: return openAI
-        }
-    }
-
-    private static let claude = loadAny(named: "claude")
-        ?? loadAny(named: "Claude_Logo_3")
-    private static let openAI = loadAny(named: "OpenAI-white-monoblossom")
-        ?? loadAny(named: "OpenAI-black-monoblossom")
-
-    private static func loadAny(named resource: String) -> NSImage? {
-        for ext in ["png", "svg"] {
-            let candidates: [URL?] = [
-                Bundle.module.url(forResource: resource, withExtension: ext, subdirectory: "Logos"),
-                Bundle.module.url(forResource: resource, withExtension: ext)
-            ]
-            for url in candidates {
-                if let url, let image = NSImage(contentsOf: url) {
-                    image.isTemplate = true
-                    return image
-                }
-            }
-        }
-        return nil
-    }
-}

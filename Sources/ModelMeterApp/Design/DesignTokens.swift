@@ -81,14 +81,6 @@ enum ProviderTheme {
         return accent(provider)
     }
 
-    static func statusColor(_ provider: UsageProvider, percent: Double?) -> Color {
-        guard let percent else { return secondaryText(provider) }
-        if provider == .claude, percent >= Double(UsageThresholds.critical90) {
-            return ModelMeterColors.claudeError
-        }
-        return accent(provider)
-    }
-
     static func border(_ provider: UsageProvider) -> Color {
         switch provider {
         case .claude: return ModelMeterColors.claudeSecondary.opacity(0.30)
@@ -166,4 +158,25 @@ enum ModelMeterLayout {
     static let elementGap: CGFloat = 8
     static let progressHeight: CGFloat = 4
     static let progressRadius: CGFloat = 2
+}
+
+struct BorderedRounded: ViewModifier {
+    let color: Color
+    let radius: CGFloat
+    let lineWidth: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                RoundedRectangle(cornerRadius: radius)
+                    .stroke(color, lineWidth: lineWidth)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: radius))
+    }
+}
+
+extension View {
+    func borderedRounded(_ color: Color, radius: CGFloat = 6, lineWidth: CGFloat = 1) -> some View {
+        modifier(BorderedRounded(color: color, radius: radius, lineWidth: lineWidth))
+    }
 }

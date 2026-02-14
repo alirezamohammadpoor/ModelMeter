@@ -35,7 +35,7 @@ enum StatusIconRenderer {
             ])
 
         let symbolName = provider == .claude ? "sparkles" : "circle.grid.2x2.fill"
-        let image = ProviderStatusLogo.image(for: provider)
+        let image = ProviderLogoAssets.image(for: provider)
             ?? NSImage(systemSymbolName: symbolName, accessibilityDescription: provider.displayName)?
                 .withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
         let targetSize = provider == .codex ? codexStatusIconSize : claudeStatusIconSize
@@ -44,36 +44,6 @@ enum StatusIconRenderer {
         tintedImage?.isTemplate = false
 
         return RenderedStatusItem(image: tintedImage, title: title, symbolColor: .white)
-    }
-}
-
-private enum ProviderStatusLogo {
-    static func image(for provider: UsageProvider) -> NSImage? {
-        switch provider {
-        case .claude: return claude
-        case .codex: return openAI
-        }
-    }
-
-    private static let claude = loadAny(named: "claude")
-        ?? loadAny(named: "Claude_Logo_3")
-    private static let openAI = loadAny(named: "OpenAI-white-monoblossom")
-        ?? loadAny(named: "OpenAI-black-monoblossom")
-
-    private static func loadAny(named resource: String) -> NSImage? {
-        for ext in ["png", "svg"] {
-            let candidates: [URL?] = [
-                Bundle.module.url(forResource: resource, withExtension: ext, subdirectory: "Logos"),
-                Bundle.module.url(forResource: resource, withExtension: ext)
-            ]
-            for url in candidates {
-                if let url, let image = NSImage(contentsOf: url) {
-                    image.isTemplate = true
-                    return image
-                }
-            }
-        }
-        return nil
     }
 }
 

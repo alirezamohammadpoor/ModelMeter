@@ -2,8 +2,6 @@ import Foundation
 
 public enum AuthMode: String, Sendable {
     case localCLI = "local-cli"
-    case pat
-    case oauth
 }
 
 public struct ValidationResult: Sendable {
@@ -23,6 +21,3 @@ public protocol UsageProviderConnector: Sendable {
     func fetchUsage(for provider: UsageProvider) async throws -> UsageSnapshot
     func validateEnvironment(for provider: UsageProvider) -> ValidationResult
 }
-
-public protocol PATConnector: UsageProviderConnector {}
-public protocol OAuthConnector: UsageProviderConnector {}

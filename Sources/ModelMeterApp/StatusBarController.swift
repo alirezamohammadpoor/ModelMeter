@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import Observation
 import ModelMeterCore
 
 private class PopoverPanel: NSPanel {
@@ -104,16 +103,14 @@ final class StatusBarController: NSObject {
     }
 
     private func observeStatusChanges() {
-        withObservationTracking {
-            _ = viewModel.sessionPercentValue
-            _ = viewModel.weeklyPercentValue
-            _ = viewModel.selectedProvider
+        observeChanges {
+            _ = self.viewModel.sessionPercentValue
+            _ = self.viewModel.weeklyPercentValue
+            _ = self.viewModel.selectedProvider
         } onChange: { [weak self] in
             guard let self else { return }
-            Task { @MainActor in
-                self.updateStatusIcon()
-                self.observeStatusChanges()
-            }
+            self.updateStatusIcon()
+            self.observeStatusChanges()
         }
     }
 

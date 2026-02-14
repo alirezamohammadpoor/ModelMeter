@@ -96,11 +96,7 @@ struct SettingsView: View {
                 .padding(.bottom, 12)
         }
         .background(SettingsTheme.windowBackground)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(SettingsTheme.border, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .borderedRounded(SettingsTheme.border, radius: 10)
         .frame(width: 400)
     }
 
@@ -131,24 +127,7 @@ struct SettingsView: View {
     }
 
     private func bundledScriptPath(fileName: String) -> String? {
-        let fileManager = FileManager.default
-        let resourceRoots = [
-            Bundle.module.resourceURL,
-            Bundle.main.resourceURL
-        ]
-
-        for root in resourceRoots {
-            guard let root else { continue }
-            let candidates = [
-                root.appendingPathComponent("ModelMeterScripts", isDirectory: true).appendingPathComponent(fileName),
-                root.appendingPathComponent(fileName)
-            ]
-            for candidate in candidates where fileManager.fileExists(atPath: candidate.path) {
-                return candidate.path
-            }
-        }
-
-        return nil
+        BundleResourceLocator.bundledScriptPath(fileName: fileName)
     }
 
     private var configPath: String {
