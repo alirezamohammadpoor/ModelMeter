@@ -202,6 +202,8 @@ def fetch_usage_with_retry(
 
 
 def to_iso(ts):
+    if isinstance(ts, str) and ts.strip():
+        return ts.strip()
     if isinstance(ts, (int, float)):
         return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
     return None
