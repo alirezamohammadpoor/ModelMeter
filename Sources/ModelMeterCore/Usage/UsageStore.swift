@@ -1,5 +1,9 @@
 import Foundation
 import Observation
+import os.log
+
+private let storeLogger = Logger(subsystem: "com.modelmeter", category: "UsageStore")
+private let storeDebug = ProcessInfo.processInfo.environment["MODELMETER_DEBUG"] == "1"
 
 @MainActor
 @Observable
@@ -67,10 +71,16 @@ public final class UsageStore {
             snapshots[provider] = snapshot
             errors[provider] = nil
             lastRefreshByProvider[provider] = Date()
+            if storeDebug {
+                storeLogger.debug("[ModelMeter] UsageStore.refresh(\(String(describing: provider))): session=\(snapshot.sessionUsedPercent ?? -1)%, weekly=\(snapshot.weeklyUsedPercent ?? -1)%")
+            }
         } catch {
             errors[provider] = error.localizedDescription
             snapshots[provider] = nil
             lastRefreshByProvider[provider] = Date()
+            if storeDebug {
+                storeLogger.debug("[ModelMeter] UsageStore.refresh(\(String(describing: provider))): error = \(error.localizedDescription)")
+            }
         }
     }
 

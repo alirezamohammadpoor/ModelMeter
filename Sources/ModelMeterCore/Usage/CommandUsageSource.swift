@@ -1,4 +1,8 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.modelmeter", category: "CommandUsageSource")
+private let isDebug = ProcessInfo.processInfo.environment["MODELMETER_DEBUG"] == "1"
 
 public enum CommandUsageError: LocalizedError {
     case missingCommand
@@ -22,6 +26,7 @@ public struct CommandUsageSource: Sendable {
 
     public func fetch(config: ModelMeterConfig, provider: UsageProvider) throws -> UsageSnapshot {
         let command = resolveCommand(config: config, provider: provider)
+        if isDebug { logger.debug("[ModelMeter] fetch: resolved command = \(command)") }
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw CommandUsageError.missingCommand
         }
@@ -54,6 +59,12 @@ public struct CommandUsageSource: Sendable {
             process.arguments = ["-lc", trimmed]
         }
 
+        if isDebug {
+            var env = ProcessInfo.processInfo.environment
+            env["MODELMETER_DEBUG"] = "1"
+            process.environment = env
+        }
+
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout
@@ -66,6 +77,14 @@ public struct CommandUsageSource: Sendable {
         let errData = stderr.fileHandleForReading.readDataToEndOfFile()
         let outText = String(data: outData, encoding: .utf8) ?? ""
         let errText = String(data: errData, encoding: .utf8) ?? ""
+
+        if isDebug {
+            logger.debug("[ModelMeter] runCommand: exit code = \(process.terminationStatus)")
+            logger.debug("[ModelMeter] runCommand: stdout = \(outText)")
+            if !errText.isEmpty {
+                logger.debug("[ModelMeter] runCommand: stderr = \(errText)")
+            }
+        }
 
         guard process.terminationStatus == 0 else {
             let message = errText.isEmpty ? "Command failed with exit code \(process.terminationStatus)." : errText
@@ -111,6 +130,9 @@ private struct CommandUsagePayload: Decodable {
         if let sessionPercent, let weeklyPercent {
             sessionValue = sessionPercent
             weeklyValue = weeklyPercent
+            if isDebug {
+                logger.debug("[ModelMeter] toSnapshot: using sessionPercent=\(sessionPercent), weeklyPercent=\(weeklyPercent)")
+            }
         } else {
             let progressLines = (lines ?? []).filter { line in
                 line.type == "progress" && (line.unit == nil || line.unit == "percent")
@@ -123,6 +145,9 @@ private struct CommandUsagePayload: Decodable {
             }
             sessionValue = sessionLine?.value ?? progressLines.first?.value
             weeklyValue = weeklyLine?.value ?? progressLines.dropFirst().first?.value
+            if isDebug {
+                logger.debug("[ModelMeter] toSnapshot: using lines fallback, session=\(sessionValue ?? -1), weekly=\(weeklyValue ?? -1)")
+            }
         }
 
         guard let sessionValue, let weeklyValue else {

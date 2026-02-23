@@ -208,8 +208,8 @@ def normalize_percent(value) -> float:
         numeric = float(value)
     except Exception:
         return 0.0
-    # Some APIs return utilization in 0..1, others already in 0..100.
-    return numeric * 100.0 if numeric <= 1.0 else numeric
+    # Claude API returns utilization already in 0..100 scale.
+    return numeric
 
 
 def main() -> None:

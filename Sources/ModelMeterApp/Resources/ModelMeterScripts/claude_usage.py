@@ -9,6 +9,14 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Tuple
 
+DEBUG = os.environ.get("MODELMETER_DEBUG", "").strip() == "1"
+
+
+def debug(msg: str) -> None:
+    if DEBUG:
+        print(f"[ModelMeter:py] {msg}", file=sys.stderr)
+
+
 CRED_PATHS = [
     os.path.expanduser("~/.claude/.credentials.json"),
     os.path.expanduser("~/.config/claude/.credentials.json"),
@@ -169,6 +177,7 @@ def refresh_token(oauth: dict, creds: dict, source: str, path: Optional[str]) ->
 
 
 def fetch_usage(token: str) -> Tuple[int, dict]:
+    debug(f"fetch_usage: GET {USAGE_URL}")
     status, payload, _, err = request_json(
         USAGE_URL,
         "GET",
@@ -182,6 +191,10 @@ def fetch_usage(token: str) -> Tuple[int, dict]:
         None,
         timeout=10,
     )
+    debug(f"fetch_usage: HTTP {status}")
+    debug(f"fetch_usage: raw payload = {json.dumps(payload, indent=2)}")
+    if err:
+        debug(f"fetch_usage: error = {err}")
     return status, payload
 
 
@@ -214,8 +227,8 @@ def normalize_percent(value) -> float:
         numeric = float(value)
     except Exception:
         return 0.0
-    # Some APIs return utilization in 0..1, others already in 0..100.
-    return numeric * 100.0 if numeric <= 1.0 else numeric
+    # Claude API returns utilization already in 0..100 scale.
+    return numeric
 
 
 def main() -> None:
@@ -239,8 +252,17 @@ def main() -> None:
     five_hour = data.get("five_hour", {}) if isinstance(data.get("five_hour"), dict) else {}
     seven_day = data.get("seven_day", {}) if isinstance(data.get("seven_day"), dict) else {}
 
-    session_percent = normalize_percent(five_hour.get("utilization", 0.0))
-    weekly_percent = normalize_percent(seven_day.get("utilization", 0.0))
+    debug(f"main: five_hour dict = {json.dumps(five_hour, indent=2)}")
+    debug(f"main: seven_day dict = {json.dumps(seven_day, indent=2)}")
+
+    raw_session = five_hour.get("utilization", 0.0)
+    raw_weekly = seven_day.get("utilization", 0.0)
+    debug(f"main: raw utilization session={raw_session!r} (type={type(raw_session).__name__})")
+    debug(f"main: raw utilization weekly={raw_weekly!r} (type={type(raw_weekly).__name__})")
+
+    session_percent = normalize_percent(raw_session)
+    weekly_percent = normalize_percent(raw_weekly)
+    debug(f"main: normalized session_percent={session_percent}, weekly_percent={weekly_percent}")
 
     payload = {
         "sessionPercent": session_percent,
@@ -250,6 +272,7 @@ def main() -> None:
         "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
+    debug(f"main: final payload = {json.dumps(payload, indent=2)}")
     print(json.dumps(payload))
 
 
