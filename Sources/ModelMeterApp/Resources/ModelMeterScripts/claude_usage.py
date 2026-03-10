@@ -209,6 +209,14 @@ def fetch_usage_with_retry(
             status, payload = fetch_usage(refreshed)
             if 200 <= status < 300:
                 return payload, refreshed
+    # Retry on 429 with exponential backoff
+    if status == 429:
+        for attempt, delay in enumerate([2, 5, 10], start=1):
+            debug(f"fetch_usage_with_retry: 429 rate limited, retry {attempt} after {delay}s")
+            time.sleep(delay)
+            status, payload = fetch_usage(token)
+            if status != 429:
+                break
     if 200 <= status < 300:
         return payload, token
     fail(f"Usage request failed: HTTP {status} from {USAGE_URL}")

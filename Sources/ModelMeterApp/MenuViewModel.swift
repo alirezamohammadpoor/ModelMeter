@@ -121,8 +121,18 @@ final class MenuViewModel {
             || lower.contains("log in")
     }
 
+    var isXcodeLicenseError: Bool {
+        guard let err = currentError else { return false }
+        let lower = err.lowercased()
+        return lower.contains("xcode") && lower.contains("license")
+    }
+
     var errorHint: String? {
-        guard currentError != nil, isAuthError else { return nil }
+        guard currentError != nil else { return nil }
+        if isXcodeLicenseError {
+            return "Run `sudo xcodebuild -license accept` in Terminal, then relaunch."
+        }
+        guard isAuthError else { return nil }
         if store.selectedProvider == .claude {
             return "Run `claude` in Terminal to re-authenticate."
         }
